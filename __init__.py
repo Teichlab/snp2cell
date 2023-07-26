@@ -1,0 +1,1 @@
+from snp2cell.snp2cell import *
