@@ -3,4 +3,6 @@ __pycache__
 .ipynb_checkpoints/
 **/.ipynb_checkpoints
 *.pyc
+build/
+snp2cell.egg-info/
 
