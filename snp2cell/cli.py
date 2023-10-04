@@ -255,7 +255,7 @@ def contrast_scores(
     # contrast scores
     scr1 = s2c.get_scores(which="original")[score_key1]  # .replace({np.nan: 0})
     scr2 = s2c.get_scores(which="original")[score_key2]  # .replace({np.nan: 0})
-    scr = scr1 - scr2
+    scr: pd.Series = scr1 - scr2
     scr_dct = scr[(scr > 0) & ~scr.isna()].to_dict()
     log.info(f"top scores: \n{pd.Series(scr_dct).sort_values(ascending=False)[:5]}")
 

@@ -259,7 +259,7 @@ def filter_summ_stat(
     snp_pr_filt = snp_pr.overlap(network_loc_pr)
 
     if out_path:
-        snp_pr_filt.to_csv(out_path, sep="\t", index=False)
+        snp_pr_filt.to_csv(out_path, sep="\t")
     if return_df:
         return snp_pr_filt.df
     else:
