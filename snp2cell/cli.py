@@ -1,12 +1,13 @@
 import logging
 import pickle
+import typing
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
 import scanpy as sc
-import typer
+import typer  # type: ignore
 from typing_extensions import Annotated
 
 import snp2cell
@@ -34,7 +35,7 @@ def create_object(
         G = pickle.load(f)
 
     # create object
-    log.info(f"create SNP2CELL object")
+    log.info("create SNP2CELL object")
     s2c = SNP2CELL()
     s2c.add_grn_from_networkx(G)
 
@@ -46,9 +47,9 @@ def create_object(
 @app.command()
 @add_logger()
 def create_gene2pos_mapping(
-    s2c_obj: Annotated[Path, typer.Argument(help="path to SNP2CELL object")],
     pos2gene_csv: Annotated[
-        Path, typer.Argument(help="output path for csv file with mapping")
+        typing.Union[str, Path],
+        typer.Argument(help="output path for csv file with mapping"),
     ] = "pos2gene.csv",
     host: Annotated[
         str,
@@ -61,17 +62,13 @@ def create_gene2pos_mapping(
     """
     Query pybiomart to obtain genomic locations for genes in the network in the s2c object and save them to a csv file.
     """
-    # load object
-    log.info(f"load SNP2CELL object")
-    s2c = SNP2CELL(s2c_obj)
-
     # query biomart to obtain genomic locations for genes
     log.info(f"query biomart host: {host}")
     pos2gene = snp2cell.util.get_gene2pos_mapping(host=host, rev=True)
 
     # save to file
     log.info(f"save to file: {Path(pos2gene_csv).resolve()}")
-    pd.DataFrame(pos2gene, index=[0]).T.sort_values(0).to_csv(
+    pd.DataFrame(pos2gene, index=[0]).T.sort_values(0).to_csv(  # type: ignore
         pos2gene_csv, header=False
     )
 
@@ -90,13 +87,13 @@ def filter_summ_stats(
         Path, typer.Argument(help="output path for filtered summary statistics")
     ],
     summ_stat_header: Annotated[
-        str, typer.Option(help="comma separated string with header")
+        typing.Optional[str], typer.Option(help="comma separated string with header")
     ] = None,
     ld_score_header: Annotated[
-        str, typer.Option(help="comma separated string with header")
+        typing.Optional[str], typer.Option(help="comma separated string with header")
     ] = None,
     pos2gene_csv: Annotated[
-        Path,
+        typing.Optional[Path],
         typer.Option(
             "--pos2gene",
             "-p",
@@ -117,7 +114,7 @@ def filter_summ_stats(
     ["Chromosome", "Position", "L2"]
     """
     # load object
-    log.info(f"load SNP2CELL object")
+    log.info("load SNP2CELL object")
     s2c = SNP2CELL(s2c_obj)
 
     # get network locations
@@ -126,11 +123,12 @@ def filter_summ_stats(
         log.info(f"get pos2gene mapping from file: {Path(pos2gene_csv).resolve()}")
         gene2pos = pd.read_csv(pos2gene_csv, header=None, index_col=1)[0].to_dict()
 
-    log.info(f"extract genomic locations for graph nodes")
+    log.info("extract genomic locations for graph nodes")
     nx_loc_df = snp2cell.util.graph_nodes_to_bed(s2c.grn, gene2pos=gene2pos)
+    assert nx_loc_df
 
     # filter summ stats
-    log.info(f"filter summary statistics by node locations")
+    log.info("filter summary statistics by node locations")
     summ_stat_kwargs = {}
     if summ_stat_header:
         summ_stat_kwargs = dict(
@@ -142,10 +140,11 @@ def filter_summ_stats(
         network_loc=nx_loc_df,
         summ_stat_kwargs=summ_stat_kwargs,
     )
+    assert snp_filt_df
 
     # add LD scores
-    log.info(f"add LD score locations and save")
-    add_df_kwargs = {"index_col": 0}
+    log.info("add LD score locations and save")
+    add_df_kwargs: dict[str, typing.Union[int, list[str], None]] = {"index_col": 0}
     if ld_score_header:
         add_df_kwargs["names"] = ld_score_header.split(",")
         add_df_kwargs["header"] = None
@@ -170,14 +169,16 @@ def score_snp(
         str, typer.Option("--save-key", "-k", help="name for saving scores in object")
     ] = "snp_score",
     pos2gene_csv: Annotated[
-        Path,
+        typing.Optional[Path],
         typer.Option(
             "--pos2gene",
             "-p",
             help="csv file with no header and location (chrX:XXX-XXX) to gene symbol mapping; default: retrieve from biomart",
         ),
     ] = None,
-    n_cpu: Annotated[int, typer.Option(help="number of cpus to use")] = None,
+    n_cpu: Annotated[
+        typing.Optional[int], typer.Option(help="number of cpus to use")
+    ] = None,
     log=logging.getLogger(),
 ):
     """
@@ -189,13 +190,14 @@ def score_snp(
     This file can be created with `filter_summ_stats`.
     """
     # load object
-    log.info(f"load SNP2CELL object")
+    log.info("load SNP2CELL object")
     s2c = SNP2CELL(s2c_obj)
 
     # load SNP scores
     log.info(f"load summary statistics from {Path(summ_stat_bed).resolve()}")
+    assert s2c.grn
     regions = [n for n in s2c.grn.nodes if n[:3] == "chr"]
-    log.info(f"compute SNP scores")
+    log.info("compute SNP scores")
     snp_scr = snp2cell.util.get_snp_scores_parallel(
         regions, summ_stat_bed, num_cores=n_cpu
     )
@@ -205,13 +207,13 @@ def score_snp(
         log.info(f"get pos2gene mapping from file: {Path(pos2gene_csv).resolve()}")
         pos2gene = pd.read_csv(pos2gene_csv, header=None, index_col=0)[1].to_dict()
     else:
-        log.info(f"query biomart for pos2gene mapping")
+        log.info("query biomart for pos2gene mapping")
         pos2gene = snp2cell.util.get_gene2pos_mapping(rev=True)
     snp_scr = {(pos2gene[k] if k in pos2gene else k): v for k, v in snp_scr.items()}
     log.info(f"top scores: \n{pd.Series(snp_scr).sort_values(ascending=False)[:5]}")
 
     # propagate score
-    log.info(f"add scores to SNP2CELL object")
+    log.info("add scores to SNP2CELL object")
     s2c.add_score(snp_scr, score_key=save_key, num_cores=n_cpu)
 
     # save
@@ -230,14 +232,16 @@ def contrast_scores(
         str, typer.Argument(help="key for scores stored in object (reference)")
     ],
     save_key: Annotated[
-        str,
+        typing.Optional[str],
         typer.Option(
             "--save-key",
             "-k",
             help="name for saving scores in object; default: `(score_key1 - score_key2)`",
         ),
     ] = None,
-    n_cpu: Annotated[int, typer.Option(help="number of cpus to use")] = None,
+    n_cpu: Annotated[
+        typing.Optional[int], typer.Option(help="number of cpus to use")
+    ] = None,
     log=logging.getLogger(),
 ):
     """
@@ -245,21 +249,21 @@ def contrast_scores(
     based on random permutations.
     """
     # load object
-    log.info(f"load SNP2CELL object")
+    log.info("load SNP2CELL object")
     s2c = SNP2CELL(s2c_obj)
 
     # contrast scores
     scr1 = s2c.get_scores(which="original")[score_key1]  # .replace({np.nan: 0})
     scr2 = s2c.get_scores(which="original")[score_key2]  # .replace({np.nan: 0})
     scr = scr1 - scr2
-    scr = scr[(scr > 0) & ~scr.isna()].to_dict()
-    log.info(f"top scores: \n{pd.Series(scr).sort_values(ascending=False)[:5]}")
+    scr_dct = scr[(scr > 0) & ~scr.isna()].to_dict()
+    log.info(f"top scores: \n{pd.Series(scr_dct).sort_values(ascending=False)[:5]}")
 
     # propagate score
-    log.info(f"add scores to SNP2CELL object")
+    log.info("add scores to SNP2CELL object")
     if save_key is None:
         save_key = f"({score_key1} - {score_key2})"
-    s2c.add_score(scr, score_key=save_key, num_cores=n_cpu)
+    s2c.add_score(scr_dct, score_key=save_key, num_cores=n_cpu)
 
     # save
     log.info(f"save SNP2CELL object to {Path(s2c_obj).resolve()}")
@@ -315,7 +319,8 @@ def score_de(
         ),
     ] = "snp_score",
     n_cpu: Annotated[
-        int, typer.Option("--n-cpu", "-c", help="number of cpus to use")
+        typing.Optional[int],
+        typer.Option("--n-cpu", "-c", help="number of cpus to use"),
     ] = None,
     log=logging.getLogger(),
 ):
@@ -328,10 +333,10 @@ def score_de(
     log.info(f"load anndata from {Path(anndata).resolve()}")
     ad = sc.read(anndata)
     if use_raw:
-        log.info(f"load from `ad.raw` attribute")
+        log.info("load from `ad.raw` attribute")
         ad = ad.raw.to_adata()
     if run_lognorm:
-        log.info(f"log-normalise")
+        log.info("log-normalise")
         sc.pp.normalize_total(ad)
         sc.pp.log1p(ad)
     if ad.X.max() > 50:
@@ -344,16 +349,16 @@ def score_de(
         raise ValueError(msg)
 
     # a bug in some anndata versions removes `base` entry
-    if not "base" in ad.uns["log1p"]:
+    if "base" not in ad.uns["log1p"]:
         ad.uns["log1p"]["base"] = None
 
     # load object
-    log.info(f"load SNP2CELL object")
+    log.info("load SNP2CELL object")
     s2c = SNP2CELL(s2c_obj)
     s2c.link_adata(ad, overwrite=True)
 
     # score de
-    log.info(f"add DE scores to SNP2CELL object")
+    log.info("add DE scores to SNP2CELL object")
     s2c.adata_add_de_scores(
         groupby=groupby,
         num_cores=n_cpu,
@@ -391,7 +396,7 @@ def combine_scores(
     combine SNP score with DE scores and compute statistics.
     """
     # load object
-    log.info(f"load SNP2CELL object")
+    log.info("load SNP2CELL object")
     s2c = SNP2CELL(s2c_obj)
 
     # combine scores

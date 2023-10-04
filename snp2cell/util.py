@@ -175,7 +175,7 @@ def graph_nodes_to_bed(
     chrs: typing.Optional[list[str]] = None,
     out_path: typing.Optional[str] = None,
     return_df: bool = True,
-) -> typing.Optional[object]:
+) -> typing.Optional[pd.DataFrame]:
     """
     create a BED file / return a dataframe with genomic locations for nodes in `nx_graph`
     :param nx_graph: a networkx graph
@@ -223,12 +223,12 @@ def graph_nodes_to_bed(
 
 def filter_summ_stat(
     summ_stat_path: typing.Union[str, os.PathLike],
-    network_loc: typing.Union[str, os.PathLike],
+    network_loc: typing.Union[str, os.PathLike, pd.DataFrame],
     out_path: typing.Optional[typing.Union[str, os.PathLike]] = None,
     return_df: bool = True,
     summ_stat_kwargs: typing.Optional[dict] = None,
     network_loc_kwargs: typing.Optional[dict] = None,
-) -> typing.Optional[object]:
+) -> typing.Optional[pd.DataFrame]:
     """
     filter CSV file with summary statistics `summ_stat_path` to those overlapping locations in another file `network_loc`.
     Write results to a new file `out_path`.
@@ -416,7 +416,7 @@ def get_snp_scores_parallel(
     regions: list[str],
     summ_stat_bed_path: typing.Union[str, os.PathLike],
     chunk_size: int = 1000,
-    num_cores: int = 8,
+    num_cores: typing.Optional[int] = 8,
     **kwargs: typing.Any,
 ) -> dict[str, float]:
     """
@@ -424,7 +424,7 @@ def get_snp_scores_parallel(
 
     :param regions: list of region strings (like "chr1:234-245")
     :param summ_stat_bed_path: bath to BED file with summary statistics
-    :param num_cores: number of cores to use
+    :param num_cores: number of cores to use (default: 8)
     :param chunk_size: chunk size of regions passed to each core at once
     :param kwargs: kwargs for `pd.read_table(summ_stat_bed_path, **kwargs)`
     :return: dictionary with a score for each genomic location

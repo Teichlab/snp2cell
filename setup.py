@@ -7,7 +7,7 @@ setup(
     url="https://github.com/JPatrickPett/snp2cell",
     author="J.P.Pett",
     author_email="jp30@sanger.ac.uk",
-    license="BSD 2-clause",
+    license="BSD 3-clause",
     packages=find_packages(),
     entry_points={
         "console_scripts": ["snp2cell=snp2cell.cli:app"],
