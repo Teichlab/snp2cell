@@ -8,9 +8,31 @@ A networkx graph of the gene regulatory network with integrated scores can be us
 
 ## Installation
 
+Optional: create and activate a new conda environment (with python<3.12):
 ```commandline
 mamba create -n snp2cell python<3.12
 mamba activate snp2cell
+```
 
+Install snp2cell:
+```commandline
+pip install git+ssh://git@github.com/JPatrickPett/snp2cell.git
+```
 
+Optional: activate autocompletion for the command line tool.
+E.g. for bash run:
+```commandline
+snp2cell --install-completion bash
+. ~/.bashrc
+```
+
+More help:
+```commandline
+snp2cell --help
+```
+
+## Quickstart
+
+```commandline
+#TODO
 ```
