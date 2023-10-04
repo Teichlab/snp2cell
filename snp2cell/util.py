@@ -1,25 +1,42 @@
 import logging
+import os
 import pickle
 import re
+import typing
 from functools import wraps
 from inspect import signature
 from pathlib import Path
 
 import dill
+import networkx as nx
 import numpy as np
 import pandas as pd
 import pyranges
+import scanpy
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
 import snp2cell
 
+F = typing.TypeVar("F", bound=typing.Callable[..., typing.Any])
 
-def set_num_cpu(n):
+
+def set_num_cpu(n: int) -> None:
+    """
+    Globally set the number of CPUs.
+    :rtype: None
+    :param n: number of CPUs
+    """
     snp2cell.NCPU = n
 
 
-def add_logger(show_start_end=True):
+def add_logger(show_start_end: bool = True) -> typing.Callable[[F], F]:
+    """
+    Decorator to add logging to a function or method.
+
+    :param show_start_end: display a message when entering and leaving the function or method.
+    """
+
     def _add_logger(f):
         @wraps(f)
         def wrapped(*args, **kargs):
@@ -68,16 +85,28 @@ def test_logging(log=logging.getLogger()):
 
 @add_logger(show_start_end=False)
 def loop_parallel(
-    loop_iter,
-    func,
-    num_cores=None,
-    total=None,
-    log=logging.getLogger(),
-    *args,
-    **kwargs,
-):
+    loop_iter: typing.Iterable,
+    func: typing.Callable,
+    num_cores: typing.Optional[int] = None,
+    total: typing.Optional[int] = None,
+    log: logging.Logger = logging.getLogger(),
+    *args: typing.Any,
+    **kwargs: typing.Any,
+) -> list:
+    """
+    loop over input list and apply a function in parallel.
+
+    :param loop_iter: list with inputs to `func`
+    :param func: function to apply to each list element
+    :param num_cores: number of cores to use
+    :param total: total number of iterations
+    :param log: logger object
+    :param args: position arguments passed to `func`
+    :param kwargs: kwargs passed to `func`
+    :return: list with output values
+    """
     if not num_cores:
-        num_cores = NCPU
+        num_cores = snp2cell.NCPU
     log.info(f"using {num_cores} cores")
 
     inputs = tqdm(loop_iter, position=0, leave=True, total=total)
@@ -85,7 +114,19 @@ def loop_parallel(
     return Parallel(n_jobs=num_cores)(delayed(func)(i, *args, **kwargs) for i in inputs)
 
 
-def get_gene2pos_mapping(host=None, chrs=None, rev=False):
+def get_gene2pos_mapping(
+    host: typing.Optional[str] = None,
+    chrs: typing.Optional[list] = None,
+    rev: bool = False,
+) -> dict:
+    """
+    query biomart to get a mapping of gene symbols to genomic locations (largest range).
+
+    :param host: biomart host, change to use archived versions (default: "http://www.ensembl.org")
+    :param chrs: chromosomes to use (default: 1-22)
+    :param rev: reverse the dictionary and return {<genomic location>: <gene symbol>}
+    :return: a dictionary {<gene symbol>: <genomic location>}
+    """
     import pybiomart
 
     host = host or "http://www.ensembl.org"
@@ -129,8 +170,21 @@ def get_gene2pos_mapping(host=None, chrs=None, rev=False):
 
 
 def graph_nodes_to_bed(
-    nx_graph, gene2pos=None, chrs=None, out_path=None, return_df=True
-):
+    nx_graph: nx.Graph,
+    gene2pos: typing.Optional[dict[str, str]] = None,
+    chrs: typing.Optional[list[str]] = None,
+    out_path: typing.Optional[str] = None,
+    return_df: bool = True,
+) -> typing.Optional[object]:
+    """
+    create a BED file / return a dataframe with genomic locations for nodes in `nx_graph`
+    :param nx_graph: a networkx graph
+    :param gene2pos: a dict with gene symbol to genomic location mapping (default: query biomart latest version)
+    :param chrs: chromosomes to use (default: 1-22)
+    :param out_path: output path for BED file
+    :param return_df: whether to return a data frame
+    :return:
+    """
     chrs = chrs or [str(i + 1) for i in range(22)]
 
     if isinstance(nx_graph, str):
@@ -139,7 +193,7 @@ def graph_nodes_to_bed(
     if not gene2pos:
         gene2pos = get_gene2pos_mapping(chrs=chrs)
 
-    network_loc_df = pd.DataFrame(index=nx_graph.nodes)
+    network_loc_df = pd.DataFrame(index=list(nx_graph.nodes))
 
     network_loc_df["position"] = [
         x if re.match(".*:.*-.*", x) else None for x in network_loc_df.index.tolist()
@@ -163,23 +217,29 @@ def graph_nodes_to_bed(
         network_loc_df.to_csv(out_path, sep="\t", index=False)
     if return_df:
         return network_loc_df
+    else:
+        return None
 
 
 def filter_summ_stat(
-    summ_stat_path,
-    network_loc,
-    out_path=None,
-    return_df=True,
-    summ_stat_kwargs=None,
-    network_loc_kwargs=None,
-):
+    summ_stat_path: typing.Union[str, os.PathLike],
+    network_loc: typing.Union[str, os.PathLike],
+    out_path: typing.Optional[typing.Union[str, os.PathLike]] = None,
+    return_df: bool = True,
+    summ_stat_kwargs: typing.Optional[dict] = None,
+    network_loc_kwargs: typing.Optional[dict] = None,
+) -> typing.Optional[object]:
     """
-    @param summ_stat_kwargs:
-    @param network_loc_kwargs:
-    @param return_df:
-    @param out_path:
-    @param network_loc:
-    @param summ_stat_path:
+    filter CSV file with summary statistics `summ_stat_path` to those overlapping locations in another file `network_loc`.
+    Write results to a new file `out_path`.
+
+    :param summ_stat_path: path to CSV file with summary statistics
+    :param network_loc: path to CSV file with genomic locations of network nodes
+    :param out_path: path for output CSV file
+    :param return_df: whether to return a pandas data frame
+    :param summ_stat_kwargs: kwargs passed to `pd.read_table(summ_stat_path, ...)`
+    :param network_loc_kwargs: kwargs passed to `pd.read_table(network_loc, ...)`
+    :return: None or pandas `DataFrame`
     """
     import pyranges
 
@@ -202,30 +262,49 @@ def filter_summ_stat(
         snp_pr_filt.to_csv(out_path, sep="\t", index=False)
     if return_df:
         return snp_pr_filt.df
+    else:
+        return None
 
 
 def add_col_to_bed(
-    bed,
-    add_df,
-    add_df_merge_on=["CHR", "START", "END"],
-    rename={},
-    drop=[],
-    filter=None,
-    out_path=None,
-    return_df=True,
-    bed_kwargs={},
-    add_df_kwargs={},
-):
-    if isinstance(bed, (str, Path)):
+    bed: typing.Union[str, os.PathLike, pd.DataFrame],
+    add_df: typing.Union[str, os.PathLike, pd.DataFrame],
+    add_df_merge_on: list[str] = ["CHR", "START", "END"],
+    rename: dict = {},
+    drop: list = [],
+    filter: typing.Optional[list[str]] = None,
+    out_path: typing.Optional[typing.Union[str, os.PathLike]] = None,
+    return_df: bool = True,
+    bed_kwargs: dict = {},
+    add_df_kwargs: dict = {},
+) -> typing.Optional[pd.DataFrame]:
+    """
+    Merge two tables `bed` and `add_df` read from CSV files or passed as pandas `DataFrame`.
+    Optionally rename columns, drop columns or filter columns to selection.
+    Write resulting table to CSV and/or return pandas `DataFrame`.
+
+    :param bed: path to CSV file or pandas data frame
+    :param add_df: path to CSV file or pandas data frame
+    :param add_df_merge_on: columns in `add_df` specifying chromosome, start and end position
+    :param rename: rename columns
+    :param drop: drop columns
+    :param filter: filter to selection of columns
+    :param out_path: path for output dataframe as CSV file
+    :param return_df: whether to return a pandas `DataFrame`
+    :param bed_kwargs: kwargs passed to `pd.read_table(bed, **bed_kwargs)`
+    :param add_df_kwargs: kwargs passed to `pd.read_table(add_df, **add_df_kwargs)`
+    :return: None or a pandas data frame
+    """
+    if isinstance(bed, (str, os.PathLike)):
         bed = pd.read_table(bed, **bed_kwargs)
-    if isinstance(add_df, (str, Path)):
+    if isinstance(add_df, (str, os.PathLike)):
         add_df = pd.read_table(add_df, **add_df_kwargs)
 
-    add_df = add_df.rename(columns=rename).drop(drop, axis=1)
+    add_df = add_df.rename(columns=rename).drop(drop, axis=1)  # type: ignore
     add_df = add_df.filter(filter or add_df.columns.tolist())
 
-    bed_merge_on = bed.columns.tolist()[:3]
-    bed = bed.astype({c: int for c in bed_merge_on})
+    bed_merge_on = bed.columns.tolist()[:3]  # type: ignore
+    bed = bed.astype({c: int for c in bed_merge_on})  # type: ignore
     add_df = add_df.astype({c: int for c in add_df_merge_on})
 
     mrg_df = bed.merge(
@@ -238,18 +317,45 @@ def add_col_to_bed(
         mrg_df.to_csv(out_path, sep="\t", index=False)
     if return_df:
         return mrg_df
-
-
-def get_reg_srt_keys(reg):
-    m = re.match("(chr)?(?P<chr>.+):(?P<start>[0-9]+)-(?P<end>[0-9]+)", reg)
-    if re.match("[0-9]+", m.group("chr")):
-        chrom_num = int(m.group("chr"))
     else:
-        chrom_num = {"X": 23, "Y": 24}[m.group("chr")]
-    return chrom_num, int(m.group("start")), int(m.group("end"))
+        return None
 
 
-def get_snp_scores(regions, summ_stat_bed_path, progress=True, **kwargs):
+def get_reg_srt_keys(reg: str) -> tuple[int, int, int]:
+    """
+    from a genomic location string "(chr)?(?P<chr>.+):(?P<start>[0-9]+)-(?P<end>[0-9]+)"
+    extract chromosome, start and end position (e.g. to be used for sorting).
+
+    :param reg: genomic location string
+    :return: int tuple of (<chromosome>, <start>, <end>)
+    """
+    m = re.match("(chr)?(?P<chr>.+):(?P<start>[0-9]+)-(?P<end>[0-9]+)", reg)
+    if m:
+        if re.match("[0-9]+", m.group("chr")):
+            chrom_num = int(m.group("chr"))
+        else:
+            chrom_num = {"X": 23, "Y": 24}[m.group("chr")]
+        return chrom_num, int(m.group("start")), int(m.group("end"))
+    else:
+        raise ValueError(f"could not match {reg}")
+
+
+def get_snp_scores(
+    regions: typing.Iterable[str],
+    summ_stat_bed_path: typing.Union[str, os.PathLike],
+    progress: bool = True,
+    **kwargs: typing.Any,
+) -> dict[str, float]:
+    """
+    read CSV file with summary statistics and compute a score for each SNP.
+
+    :param regions: list of region strings (like "chr1:234-245")
+    :param summ_stat_bed_path: bath to BED file with summary statistics
+    :param progress: show progress bar
+    :param kwargs: kwargs for `pd.read_table(summ_stat_bed_path, **kwargs)`
+    :return: dictionary with a score for each genomic location
+    """
+
     def get_snp_score(df):
         try:
             # snp_loc = str(df["Chromosome"]), int(df["Start"])
@@ -271,21 +377,20 @@ def get_snp_scores(regions, summ_stat_bed_path, progress=True, **kwargs):
 
     reg_scores = {}
 
+    loop_reg: typing.Union[list[str], tqdm[str]]
     if progress:
         loop_reg = tqdm(regions)
     else:
         loop_reg = list(regions)
 
     for reg in loop_reg:
-        try:
-            regm = re.match(
-                "(chr)?(?P<chr>[0-9]+):(?P<start>[0-9]+)-(?P<end>[0-9]+)", reg
-            )
-            reg_chrom = str(regm.group("chr"))
-            reg_start = int(regm.group("start"))
-            reg_end = int(regm.group("end"))
-        except:
+        regm = re.match("(chr)?(?P<chr>[0-9]+):(?P<start>[0-9]+)-(?P<end>[0-9]+)", reg)
+        if not regm:
             continue
+
+        reg_chrom = str(regm.group("chr"))
+        reg_start = int(regm.group("start"))
+        reg_end = int(regm.group("end"))
 
         snp_sel = summ_stat_pr.overlap(
             pyranges.from_dict(
@@ -308,8 +413,22 @@ def get_snp_scores(regions, summ_stat_bed_path, progress=True, **kwargs):
 
 
 def get_snp_scores_parallel(
-    regions, summ_stat_bed_path, chunk_size=1000, num_cores=8, **kwargs
-):
+    regions: list[str],
+    summ_stat_bed_path: typing.Union[str, os.PathLike],
+    chunk_size: int = 1000,
+    num_cores: int = 8,
+    **kwargs: typing.Any,
+) -> dict[str, float]:
+    """
+    read CSV file with summary statistics and compute a score for each SNP in parallel.
+
+    :param regions: list of region strings (like "chr1:234-245")
+    :param summ_stat_bed_path: bath to BED file with summary statistics
+    :param num_cores: number of cores to use
+    :param chunk_size: chunk size of regions passed to each core at once
+    :param kwargs: kwargs for `pd.read_table(summ_stat_bed_path, **kwargs)`
+    :return: dictionary with a score for each genomic location
+    """
     region_chunks = [
         regions[i : i + chunk_size] for i in range(0, len(regions), chunk_size)
     ]
@@ -328,8 +447,19 @@ def get_snp_scores_parallel(
     return reg_scores
 
 
-def get_rank_df(adata, key="rank_genes_groups", colnames=["names", "scores"]):
-    """get minimal df for a specific group (also works for method='logreg')"""
+def get_rank_df(
+    adata: scanpy.AnnData,
+    key: str = "rank_genes_groups",
+    colnames: list[str] = ["names", "scores"],
+) -> pd.DataFrame:
+    """
+    Get minimal pandas df for `rank_genes_groups` results for a specific group (also works for method='logreg').
+
+    :param adata: scanpy `AnnData` object with `rank_genes_groups` results
+    :param key: key under which `rank_genes_groups` results are stored in `adata`
+    :param colnames: columns to extract from `rank_genes_groups` results
+    :return: a pandas data frame
+    """
     return (
         pd.concat(
             [pd.DataFrame(adata.uns[key][c]) for c in colnames],
@@ -344,6 +474,12 @@ def get_rank_df(adata, key="rank_genes_groups", colnames=["names", "scores"]):
     )
 
 
-def load_snp2cell(path):
+def load_snp2cell(path: typing.Union[str, os.PathLike]) -> object:
+    """
+    Load a SNP2CELL object.
+
+    :param path: path to saved object
+    :return: SNP2CELL object
+    """
     with open(path, "rb") as f:
         return dill.load(f)
