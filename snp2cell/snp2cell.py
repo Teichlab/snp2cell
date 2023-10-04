@@ -1,33 +1,27 @@
-import os
-import sys
-import inspect
-import logging
-import gc
-import random
-import math
 import copy
-import re
-import pickle
-import dill
-import textwrap
-from inspect import signature
-from functools import wraps, partial
-
-from pathlib import Path
-import numpy as np
-import scipy as sp
-import pandas as pd
-import statsmodels.api as sm
-import networkx as nx
-import scanpy as sc
-import pyranges
-
+import gc
+import logging
 import multiprocessing
+import pickle
+import random
+import re
+import textwrap
+from functools import wraps
+from inspect import signature
+from pathlib import Path
+
+import dill
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+import pandas as pd
+import pyranges
+import scanpy as sc
+import scipy as sp
+import seaborn as sns
+import statsmodels.api as sm
 from joblib import Parallel, delayed
 from tqdm import tqdm
-import seaborn as sns
-import matplotlib.pyplot as plt
-
 
 NCPU = multiprocessing.cpu_count()
 
@@ -36,23 +30,23 @@ def set_num_cpu(n):
     NCPU = n
 
 
-def add_logger(show_start_end = True):
+def add_logger(show_start_end=True):
     def _add_logger(f):
         @wraps(f)
         def wrapped(*args, **kargs):
             func_name = f.__name__
-    
+
             log = logging.getLogger(func_name)
             log.setLevel(logging.DEBUG)
             if not log.hasHandlers():
                 c_handler = logging.StreamHandler()
                 c_handler.setLevel(logging.INFO)
                 c_format = logging.Formatter(
-                    '[%(levelname)s - %(name)s - %(asctime)s]: %(message)s'
+                    "[%(levelname)s - %(name)s - %(asctime)s]: %(message)s"
                 )
                 c_handler.setFormatter(c_format)
                 log.addHandler(c_handler)
-    
+
             if show_start_end:
                 log.info(f"----- starting {func_name} -----")
                 r = f(*args, **kargs, log=log)
@@ -60,90 +54,121 @@ def add_logger(show_start_end = True):
             else:
                 r = f(*args, **kargs, log=log)
             return r
+
         # edit signature to remove params (PEP-0362)
         remove_params = ["log"]
         sig = signature(f)
-        sig = sig.replace(parameters=tuple(v for k,v in sig.parameters.items() if k not in remove_params))
+        sig = sig.replace(
+            parameters=tuple(
+                v for k, v in sig.parameters.items() if k not in remove_params
+            )
+        )
         wrapped.__signature__ = sig
         return wrapped
+
     return _add_logger
 
 
 @add_logger()
-def test_logging(log = logging.getLogger()):
+def test_logging(log=logging.getLogger()):
     log.debug("hello logger")
     log.info("hello logger")
     log.warning("hello logger")
     log.error("hello logger")
 
 
-@add_logger(show_start_end = False)
-def loop_parallel(loop_iter, func, num_cores=None, total=None, log = logging.getLogger(), *args, **kwargs):
+@add_logger(show_start_end=False)
+def loop_parallel(
+    loop_iter,
+    func,
+    num_cores=None,
+    total=None,
+    log=logging.getLogger(),
+    *args,
+    **kwargs,
+):
     if not num_cores:
         num_cores = NCPU
     log.info(f"using {num_cores} cores")
-    
+
     inputs = tqdm(loop_iter, position=0, leave=True, total=total)
 
-    return Parallel(n_jobs=num_cores)(
-        delayed(func)(i, *args, **kwargs)
-        for i in inputs
-    )
+    return Parallel(n_jobs=num_cores)(delayed(func)(i, *args, **kwargs) for i in inputs)
 
 
 def get_gene2pos_mapping(host=None, chrs=None, rev=False):
     import pybiomart
-    
-    host = host or 'http://www.ensembl.org'
-    chrs = chrs or [str(i+1) for i in range(22)]
-    
+
+    host = host or "http://www.ensembl.org"
+    chrs = chrs or [str(i + 1) for i in range(22)]
+
     # load biomart dataset
     server = pybiomart.Server(host=host)
-    mart = server['ENSEMBL_MART_ENSEMBL']
-    dataset = mart['hsapiens_gene_ensembl']
-    
+    mart = server["ENSEMBL_MART_ENSEMBL"]
+    dataset = mart["hsapiens_gene_ensembl"]
+
     gene_df = dataset.query(
-        attributes = [
-            'chromosome_name',
-            'start_position',
-            'end_position',
-            'strand',
-            'external_gene_name',
-            'ensembl_gene_id',
+        attributes=[
+            "chromosome_name",
+            "start_position",
+            "end_position",
+            "strand",
+            "external_gene_name",
+            "ensembl_gene_id",
         ]
     )
 
-    gene_df = gene_df.drop_duplicates("Gene name").query("`Chromosome/scaffold name`.isin(@chrs)", engine='python')
-    gene_df["position"] = "chr"+ gene_df["Chromosome/scaffold name"].astype(str) +":"+ gene_df["Gene start (bp)"].astype(str) +"-"+ gene_df["Gene end (bp)"].astype(str)
-    
+    gene_df = gene_df.drop_duplicates("Gene name").query(
+        "`Chromosome/scaffold name`.isin(@chrs)", engine="python"
+    )
+    gene_df["position"] = (
+        "chr"
+        + gene_df["Chromosome/scaffold name"].astype(str)
+        + ":"
+        + gene_df["Gene start (bp)"].astype(str)
+        + "-"
+        + gene_df["Gene end (bp)"].astype(str)
+    )
+
     gene2pos = gene_df.set_index("Gene name")["position"].to_dict()
-    
+
     if not rev:
         return gene2pos
     else:
-        pos2gene = {v:k for k,v in gene2pos.items()}
+        pos2gene = {v: k for k, v in gene2pos.items()}
         return pos2gene
 
 
-def graph_nodes_to_bed(nx_graph, gene2pos=None, chrs=None, out_path=None, return_df=True):
+def graph_nodes_to_bed(
+    nx_graph, gene2pos=None, chrs=None, out_path=None, return_df=True
+):
+    chrs = chrs or [str(i + 1) for i in range(22)]
 
-    chrs = chrs or [str(i+1) for i in range(22)]
-    
     if isinstance(nx_graph, str):
         with open(nx_graph, "rb") as f:
             nx_graph = pickle.load(f)
     if not gene2pos:
         gene2pos = get_gene2pos_mapping(chrs=chrs)
-   
-    network_loc_df = pd.DataFrame(index = nx_graph.nodes)
-    
-    network_loc_df["position"] = [x if re.match(".*:.*-.*", x) else None for x in network_loc_df.index.tolist()]
+
+    network_loc_df = pd.DataFrame(index=nx_graph.nodes)
+
+    network_loc_df["position"] = [
+        x if re.match(".*:.*-.*", x) else None for x in network_loc_df.index.tolist()
+    ]
     add_msk = network_loc_df["position"].isna() & network_loc_df.index.isin(gene2pos)
-    network_loc_df["position"][add_msk] = [gene2pos[x] for x in network_loc_df.index[add_msk].tolist()]
-    
+    network_loc_df["position"][add_msk] = [
+        gene2pos[x] for x in network_loc_df.index[add_msk].tolist()
+    ]
+
     network_loc_df = network_loc_df.dropna()
-    network_loc_df = network_loc_df["position"].str.extract("(?:chr)?(?P<Chromosome>.+):(?P<Start>.+)-(?P<End>.+)", expand=True)
-    network_loc_df = network_loc_df[network_loc_df["Chromosome"].isin(chrs)].astype(int).sort_values(network_loc_df.columns.tolist())
+    network_loc_df = network_loc_df["position"].str.extract(
+        "(?:chr)?(?P<Chromosome>.+):(?P<Start>.+)-(?P<End>.+)", expand=True
+    )
+    network_loc_df = (
+        network_loc_df[network_loc_df["Chromosome"].isin(chrs)]
+        .astype(int)
+        .sort_values(network_loc_df.columns.tolist())
+    )
 
     if out_path:
         network_loc_df.to_csv(out_path, sep="\t", index=False)
@@ -151,17 +176,37 @@ def graph_nodes_to_bed(nx_graph, gene2pos=None, chrs=None, out_path=None, return
         return network_loc_df
 
 
-def filter_summ_stat(summ_stat_path, network_loc, out_path=None, return_df=True, summ_stat_kwargs={} ,network_loc_kwargs={}):
+def filter_summ_stat(
+    summ_stat_path,
+    network_loc,
+    out_path=None,
+    return_df=True,
+    summ_stat_kwargs=None,
+    network_loc_kwargs=None,
+):
+    """
+    @param summ_stat_kwargs:
+    @param network_loc_kwargs:
+    @param return_df:
+    @param out_path:
+    @param network_loc:
+    @param summ_stat_path:
+    """
     import pyranges
+
+    if network_loc_kwargs is None:
+        network_loc_kwargs = {}
+    if summ_stat_kwargs is None:
+        summ_stat_kwargs = {}
 
     if isinstance(network_loc, (str, Path)):
         network_loc = pd.read_table(network_loc, **network_loc_kwargs)
-    
+
     snp_df = pd.read_table(summ_stat_path, **summ_stat_kwargs)
     snp_pr = pyranges.PyRanges(snp_df)
-    
-    network_loc_pr = pyranges.PyRanges(network_loc)    
-    
+
+    network_loc_pr = pyranges.PyRanges(network_loc)
+
     snp_pr_filt = snp_pr.overlap(network_loc_pr)
 
     if out_path:
@@ -170,7 +215,18 @@ def filter_summ_stat(summ_stat_path, network_loc, out_path=None, return_df=True,
         return snp_pr_filt.df
 
 
-def add_col_to_bed(bed, add_df, add_df_merge_on=["CHR", "START", "END"], rename={}, drop=[], filter=None, out_path=None, return_df=True, bed_kwargs={}, add_df_kwargs={}):
+def add_col_to_bed(
+    bed,
+    add_df,
+    add_df_merge_on=["CHR", "START", "END"],
+    rename={},
+    drop=[],
+    filter=None,
+    out_path=None,
+    return_df=True,
+    bed_kwargs={},
+    add_df_kwargs={},
+):
     if isinstance(bed, (str, Path)):
         bed = pd.read_table(bed, **bed_kwargs)
     if isinstance(add_df, (str, Path)):
@@ -182,8 +238,10 @@ def add_col_to_bed(bed, add_df, add_df_merge_on=["CHR", "START", "END"], rename=
     bed_merge_on = bed.columns.tolist()[:3]
     bed = bed.astype({c: int for c in bed_merge_on})
     add_df = add_df.astype({c: int for c in add_df_merge_on})
-    
-    mrg_df = bed.merge(add_df, how="inner", left_on = bed_merge_on, right_on = add_df_merge_on)
+
+    mrg_df = bed.merge(
+        add_df, how="inner", left_on=bed_merge_on, right_on=add_df_merge_on
+    )
     mrg_df = mrg_df.sort_values(bed_merge_on)
     mrg_df.drop([x for x in add_df_merge_on if x not in bed_merge_on], axis=1)
 
@@ -198,8 +256,8 @@ def get_reg_srt_keys(reg):
     if re.match("[0-9]+", m.group("chr")):
         chrom_num = int(m.group("chr"))
     else:
-        chrom_num = {"X": 23,"Y":24}[m.group("chr")]
-    return (chrom_num, int(m.group("start")), int(m.group("end")))
+        chrom_num = {"X": 23, "Y": 24}[m.group("chr")]
+    return chrom_num, int(m.group("start")), int(m.group("end"))
 
 
 # def get_snp_scores_old(regions, summ_stat_bed_path):
@@ -234,7 +292,7 @@ def get_reg_srt_keys(reg):
 
 #             # print(snp_loc)
 #             # print(reg_chrom, reg_start, reg_end)
-            
+
 #             while snp_loc and (snp_loc[0] < reg_chrom or snp_loc[0] == reg_chrom and snp_loc[1] < int(reg_start)):
 #                 snp_loc, snp_bf = read_snp(f)
 
@@ -245,22 +303,24 @@ def get_reg_srt_keys(reg):
 
 #             mean_bf = np.nanmean(all_bf)
 #             snp_bf_per_region[reg] = mean_bf
-            
+
 #     return snp_bf_per_region
 
 
 def get_snp_scores(regions, summ_stat_bed_path, progress=True, **kwargs):
     def get_snp_score(df):
         try:
-            snp_loc = str(df["Chromosome"]), int(df["Start"])
+            # snp_loc = str(df["Chromosome"]), int(df["Start"])
             snp_beta = float(df["Beta"])
             snp_se = float(df["SE"])
             snp_ld = float(df["L2"])
             if not snp_se:
                 return np.nan
             snp_r = 0.1 / (0.1 + snp_se**2)
-            snp_bf = np.exp(np.log(1 - snp_r)/2 + (snp_beta / snp_se)**2 * snp_r / 2)
-            return np.log(snp_bf)/snp_ld
+            snp_bf = np.exp(
+                np.log(1 - snp_r) / 2 + (snp_beta / snp_se) ** 2 * snp_r / 2
+            )
+            return np.log(snp_bf) / snp_ld
         except Exception as e:
             raise ValueError(f"could not compute score using {df} \n{e}")
 
@@ -273,10 +333,12 @@ def get_snp_scores(regions, summ_stat_bed_path, progress=True, **kwargs):
         loop_reg = tqdm(regions)
     else:
         loop_reg = list(regions)
-    
+
     for reg in loop_reg:
         try:
-            regm = re.match("(chr)?(?P<chr>[0-9]+):(?P<start>[0-9]+)-(?P<end>[0-9]+)", reg)
+            regm = re.match(
+                "(chr)?(?P<chr>[0-9]+):(?P<start>[0-9]+)-(?P<end>[0-9]+)", reg
+            )
             reg_chrom = str(regm.group("chr"))
             reg_start = int(regm.group("start"))
             reg_end = int(regm.group("end"))
@@ -284,11 +346,13 @@ def get_snp_scores(regions, summ_stat_bed_path, progress=True, **kwargs):
             continue
 
         snp_sel = summ_stat_pr.overlap(
-            pyranges.from_dict({
-                "Chromosome": [reg_chrom],
-                "Start": [reg_start],
-                "End": [reg_end],
-            })
+            pyranges.from_dict(
+                {
+                    "Chromosome": [reg_chrom],
+                    "Start": [reg_start],
+                    "End": [reg_end],
+                }
+            )
         ).df
 
         if snp_sel.shape[0] > 0:
@@ -297,38 +361,45 @@ def get_snp_scores(regions, summ_stat_bed_path, progress=True, **kwargs):
             except Exception as e:
                 print(f"could not get region score for {reg}")
                 raise e
-    
+
     return reg_scores
 
 
-def get_snp_scores_parallel(regions, summ_stat_bed_path, chunk_size=1000, num_cores=8, **kwargs):
+def get_snp_scores_parallel(
+    regions, summ_stat_bed_path, chunk_size=1000, num_cores=8, **kwargs
+):
     region_chunks = [
-        regions[i:i + chunk_size] 
-        for i in range(0, len(regions), chunk_size)
+        regions[i: i + chunk_size] for i in range(0, len(regions), chunk_size)
     ]
 
     scr_list = loop_parallel(
         region_chunks,
         get_snp_scores,
-        num_cores = num_cores,
-        summ_stat_bed_path = summ_stat_bed_path,
-        progress = False,
-        **kwargs
+        num_cores=num_cores,
+        summ_stat_bed_path=summ_stat_bed_path,
+        progress=False,
+        **kwargs,
     )
 
-    reg_scores = {k:v for d in scr_list for k,v in d.items()}
+    reg_scores = {k: v for d in scr_list for k, v in d.items()}
 
     return reg_scores
 
 
-def get_rank_df(adata, key = "rank_genes_groups", colnames = ['names', 'scores']):
-    """ get minimal df for a specific group (also works for method='logreg') """
-    return pd.concat(
-        [pd.DataFrame(adata.uns[key][c]) for c in colnames], 
-        axis=1, names=[None, 'group'], keys=colnames
-    ).stack(level=1).reset_index().sort_values(
-        ['level_0']
-    ).drop(columns='level_0')
+def get_rank_df(adata, key="rank_genes_groups", colnames=["names", "scores"]):
+    """get minimal df for a specific group (also works for method='logreg')"""
+    return (
+        pd.concat(
+            [pd.DataFrame(adata.uns[key][c]) for c in colnames],
+            axis=1,
+            names=[None, "group"],
+            keys=colnames,
+        )
+        .stack(level=1)
+        .reset_index()
+        .sort_values(["level_0"])
+        .drop(columns="level_0")
+    )
 
 
 def load_snp2cell(path):
@@ -361,19 +432,18 @@ class SNP2CELL:
 
     ###--------------------------------------------------- private
 
-    
     def _init_scores(self):
         self.scores = pd.DataFrame(index=self.grn.nodes)
         self.scores_prop = pd.DataFrame(index=self.grn.nodes)
         self.scores_rand = {}
-        
+
     def _set_grn(self, nx_grn):
         self.grn = nx_grn.to_undirected()
 
     def _add_de_groups(self, groupby, groups):
         if groupby in self.de_groups:
             raise ValueError(f"group key {groupby} already exists")
-        check = True
+
         for k, v in self.de_groups.items():
             shared_keys = set(groups) & set(v)
             if len(shared_keys) > 0:
@@ -381,15 +451,15 @@ class SNP2CELL:
                     f"groups {shared_keys} already exists under key {groupby}"
                 )
         self.de_groups[groupby] = groups
-    
+
     def _scale_score(self, score_key=None, score=None, which="original", inplace=True):
         assert score_key is not None or score is not None
+        scores_out = {
+            "propagated": self.scores_prop,
+            "original": self.scores,
+            "perturbed": self.scores_rand,
+        }[which]
         if score_key:
-            scores_out = {
-                "propagated": self.scores_prop,
-                "original": self.scores,
-                "perturbed": self.scores_rand,
-            }[which]
             scr = scores_out[score_key].copy()
         else:
             scr = score.copy()
@@ -421,11 +491,11 @@ class SNP2CELL:
 
     def _std_scale(self, series):
         return (series - series.min()) / (series.max() - series.min())
-        
+
     def _prop_scr(self, scr_dct):
         return nx.pagerank(
-            self.grn, 
-            personalization = scr_dct,
+            self.grn,
+            personalization=scr_dct,
         )
 
     def _defrag_pandas(self):
@@ -437,10 +507,9 @@ class SNP2CELL:
 
     ###--------------------------------------------------- input/output
 
-
     def save_obj(self, path):
         with open(path, "wb") as f:
-            dill.dump(self)
+            dill.dump(self, f)
 
     def save_data(self, path):
         data = {
@@ -456,9 +525,7 @@ class SNP2CELL:
 
     def load_data(self, path, overwrite=False):
         if self.scores and not overwrite:
-            raise IndexError(
-                "existing data found, set overwrite=True to discard it."
-            )
+            raise IndexError("existing data found, set overwrite=True to discard it.")
         with open(path, "rb") as f:
             data = dill.load(f)
         self.grn = data["grn"]
@@ -467,10 +534,10 @@ class SNP2CELL:
         self.scores_rand = data["scores_rand"]
         self.adata = data["adata"]
         self.de_groups = data["de_groups"]
-    
+
     def add_grn_from_pandas(self, adjacency_df):
         pass
-    
+
     def add_grn_from_networkx(self, nx_grn, overwrite=False):
         if self.scores and not overwrite:
             raise IndexError(
@@ -482,19 +549,24 @@ class SNP2CELL:
         else:
             self._set_grn(nx_grn)
         self._init_scores()
-            
+
     def link_adata(self, adata, overwrite=False):
         if self.adata is not None:
-            raise IndexError(
-                "linked adata found, set overwrite=True to replace."
-            )
+            raise IndexError("linked adata found, set overwrite=True to replace.")
         self.adata = adata
-
 
     ###--------------------------------------------------- scores
 
-    @add_logger(show_start_end = False)
-    def add_score(self, score_dct, score_key="score", propagate=True, statistics=True, num_cores=None, log = logging.getLogger()):
+    @add_logger(show_start_end=False)
+    def add_score(
+        self,
+        score_dct,
+        score_key="score",
+        propagate=True,
+        statistics=True,
+        num_cores=None,
+        log=logging.getLogger(),
+    ):
         log.info(f"adding score: {score_key}")
         if score_key in self.scores:
             log.warning(f"overwriting existing score self.scores['{score_key}']")
@@ -505,7 +577,9 @@ class SNP2CELL:
             _, p_scr_dct = self.propagate_score(score_key)
             log.info(f"storing score {score_key}")
             if score_key in self.scores_prop:
-                log.warning(f"overwriting existing score self.scores_prop['{score_key}']")
+                log.warning(
+                    f"overwriting existing score self.scores_prop['{score_key}']"
+                )
             self.scores_prop[score_key] = self.scores_prop.index.map(p_scr_dct)
         if statistics:
             self.rand_sim(score_key=score_key, num_cores=num_cores)
@@ -518,21 +592,30 @@ class SNP2CELL:
         return (score_key, p_scr_dct)
 
     @add_logger()
-    def propagate_scores(self, score_keys, num_cores=None, log = logging.getLogger()):
+    def propagate_scores(self, score_keys, num_cores=None, log=logging.getLogger()):
         log.info(f"propagating scores: {score_keys}")
-        prop_scores = loop_parallel(score_keys, self.propagate_score, num_cores=num_cores)
+        prop_scores = loop_parallel(
+            score_keys, self.propagate_score, num_cores=num_cores
+        )
         for key, dct in prop_scores:
             if key in self.scores_prop:
                 log.warning(f"overwriting existing score self.scores_prop['{key}']")
             self.scores_prop[key] = self.scores_prop.index.map(dct)
 
     @add_logger()
-    def rand_sim(self, score_key="score", perturb_key=None, n=1000, num_cores=None, log = logging.getLogger()):
+    def rand_sim(
+        self,
+        score_key="score",
+        perturb_key=None,
+        n=1000,
+        num_cores=None,
+        log=logging.getLogger(),
+    ):
         log.info(f"create {n} permutations of score {score_key}")
         if isinstance(score_key, str):
             score_key = [score_key]
         if not perturb_key:
-            if len(score_key)==1:
+            if len(score_key) == 1:
                 perturb_key = score_key[0]
             else:
                 raise ValueError("must set `perturb_key` if len(score_key)>1")
@@ -542,29 +625,41 @@ class SNP2CELL:
             node_list = self.scores[key].index.tolist()
             vals_list = self.scores[key].tolist()
             random.shuffle(node_list)
-            
+
             pers_rand.append(dict(zip(node_list, vals_list)))
 
-        log.info(f"propagating permutations")
+        log.info("propagating permutations")
         prop_scores = loop_parallel(pers_rand, self._prop_scr, num_cores=num_cores)
         log.info(f"storing scores under key {perturb_key}")
-        self.scores_rand[perturb_key] = pd.DataFrame(prop_scores, index=range(len(prop_scores)))
+        self.scores_rand[perturb_key] = pd.DataFrame(
+            prop_scores, index=range(len(prop_scores))
+        )
 
     @add_logger()
-    def add_score_statistics(self, score_keys="score", log = logging.getLogger()):
+    def add_score_statistics(self, score_keys="score", log=logging.getLogger()):
         log.info(f"adding statistics for: {score_keys}")
         if isinstance(score_keys, str):
             score_keys = [score_keys]
         if isinstance(score_keys, list):
-            score_keys = {k:k for k in score_keys}
+            score_keys = {k: k for k in score_keys}
 
         dfs = []
         for s_key, p_key in score_keys.items():
-            pval = (self.scores_prop[s_key] < self.scores_rand[p_key]).sum(axis=0) / self.scores_rand[p_key].shape[0]
+            pval = (self.scores_prop[s_key] < self.scores_rand[p_key]).sum(
+                axis=0
+            ) / self.scores_rand[p_key].shape[0]
             _, fdr, _, _ = sm.stats.multipletests(pval, method="fdr_bh")
-            zscore_std = (self.scores_prop[s_key] - self.scores_rand[p_key].mean(axis=0)) / self.scores_rand[p_key].std(axis=0)
-            mad = sp.stats.median_abs_deviation(self.scores_rand[p_key], axis=0, scale=1.0)
-            zscore_mad = 0.6745 * (self.scores_prop[s_key] - self.scores_rand[p_key].median(axis=0)) / mad
+            zscore_std = (
+                self.scores_prop[s_key] - self.scores_rand[p_key].mean(axis=0)
+            ) / self.scores_rand[p_key].std(axis=0)
+            mad = sp.stats.median_abs_deviation(
+                self.scores_rand[p_key], axis=0, scale=1.0
+            )
+            zscore_mad = (
+                0.6745
+                * (self.scores_prop[s_key] - self.scores_rand[p_key].median(axis=0))
+                / mad
+            )
 
             dfs.append(
                 pd.DataFrame(
@@ -574,10 +669,10 @@ class SNP2CELL:
                         f"{s_key}__zscore": zscore_std,
                         f"{s_key}__zscore_mad": zscore_mad,
                     },
-                    index = self.scores_prop.index
+                    index=self.scores_prop.index,
                 )
             )
-        
+
         new_cols = set([c for df in dfs for c in df.columns.tolist()])
         old_cols = set(self.scores_prop.columns.tolist())
         existing_cols = new_cols & old_cols
@@ -585,18 +680,22 @@ class SNP2CELL:
         if len(existing_cols) > 0:
             log.warning(f"overwriting existing score statistics: {existing_cols}")
             self.scores_prop = self.scores_prop.drop(list(existing_cols), axis=1)
-        
+
         self.scores_prop = pd.concat([self.scores_prop] + dfs, axis=1)
         self._defrag_pandas()
 
     @add_logger()
-    def combine_scores(self, combine, scale=False, log = logging.getLogger()):
-        """ combine: list of tuples """
+    def combine_scores(self, combine, scale=False, log=logging.getLogger()):
+        """combine: list of tuples"""
         log.info(f"combining scores: {combine}")
         for key1, key2 in combine:
             if scale:
-                scr1 = self._scale_score(score_key=key1, which="propagated", inplace=False)
-                scr2 = self._scale_score(score_key=key2, which="propagated", inplace=False)
+                scr1 = self._scale_score(
+                    score_key=key1, which="propagated", inplace=False
+                )
+                scr2 = self._scale_score(
+                    score_key=key2, which="propagated", inplace=False
+                )
             else:
                 scr1 = self.scores_prop[key1]
                 scr2 = self.scores_prop[key2]
@@ -604,14 +703,18 @@ class SNP2CELL:
             self.scores_prop[comb_key] = np.min([scr1, scr2], axis=0)
 
     @add_logger()
-    def combine_scores_rand(self, combine, scale=False, log = logging.getLogger()):
-        """ combine: list of tuples """
+    def combine_scores_rand(self, combine, scale=False, log=logging.getLogger()):
+        """combine: list of tuples"""
         log.info(f"combining scores: {combine}")
         for key1, key2, suffix in combine:
             if not suffix:
                 if scale:
-                    scr1 = self._scale_score(score_key=key1, which="perturbed", inplace=False)
-                    scr2 = self._scale_score(score_key=key2, which="perturbed", inplace=False)
+                    scr1 = self._scale_score(
+                        score_key=key1, which="perturbed", inplace=False
+                    )
+                    scr2 = self._scale_score(
+                        score_key=key2, which="perturbed", inplace=False
+                    )
                 else:
                     scr1 = self.scores_rand[key1]
                     scr2 = self.scores_rand[key2]
@@ -619,32 +722,35 @@ class SNP2CELL:
                 scr1 = self._get_perturbed_stats(score_key=key1, suffix=suffix)
                 scr2 = self._get_perturbed_stats(score_key=key2, suffix=suffix)
                 if scale:
-                    scr1 = self._scale_score(score=scr1, which="perturbed", inplace=False)
-                    scr2 = self._scale_score(score=scr2, which="perturbed", inplace=False)
-            
-            scr1 = scr1.loc[:,scr2.columns]
+                    scr1 = self._scale_score(
+                        score=scr1, which="perturbed", inplace=False
+                    )
+                    scr2 = self._scale_score(
+                        score=scr2, which="perturbed", inplace=False
+                    )
+
+            scr1 = scr1.loc[:, scr2.columns]
             min_n = min(scr1.shape[0], scr2.shape[0])
-            scr1 = scr1.iloc[:min_n,:]
-            scr2 = scr2.iloc[:min_n,:]
-            
+            scr1 = scr1.iloc[:min_n, :]
+            scr2 = scr2.iloc[:min_n, :]
+
             comb_key = f"min({key1}{suffix},{key2}{suffix})"
             self.scores_rand[comb_key] = np.minimum(scr1, scr2)
-
 
     ###--------------------------------------------------- adata
 
     @add_logger()
     def adata_add_de_scores(
-        self, 
-        groupby="celltype", 
-        check=True, 
-        topn=500, 
-        simn=1000, 
-        statistics=True, 
-        num_cores=None, 
-        log = logging.getLogger(),
-        rank_by = "up",
-        **kwargs
+        self,
+        groupby="celltype",
+        check=True,
+        topn=500,
+        simn=1000,
+        statistics=True,
+        num_cores=None,
+        log=logging.getLogger(),
+        rank_by="up",
+        **kwargs,
     ):
         if check:
             if self.adata.X.max() > 50:
@@ -655,14 +761,14 @@ class SNP2CELL:
         if "method" not in kwargs:
             kwargs["method"] = "wilcoxon"
             kwargs["rankby_abs"] = True
-        
+
         log.info(f"finding DE genes for annotation {groupby}")
         sc.tl.rank_genes_groups(self.adata, groupby=groupby, **kwargs)
 
         if "method" in kwargs and kwargs["method"] == "logreg":
             de_df = get_rank_df(self.adata)
         else:
-            de_df = sc.get.rank_genes_groups_df(self.adata, group = None)
+            de_df = sc.get.rank_genes_groups_df(self.adata, group=None)
 
         if rank_by == "abs":
             log.info("ranking by up- and downregulation...")
@@ -684,7 +790,7 @@ class SNP2CELL:
             else:
                 query_str = f"group == '{grp}' and pvals_adj < 0.05"
             scr = de_df.query(query_str).set_index("names")["scores"][:topn].to_dict()
-            
+
             scr_key = f"DE_{grp}__score"
             self.add_score(scr, score_key=scr_key, propagate=False, statistics=False)
             score_keys.append(scr_key)
@@ -693,33 +799,38 @@ class SNP2CELL:
 
         if statistics:
             self.rand_sim(
-                score_key = [f"DE_{grp}__score" for grp in groups],
-                perturb_key = f"DE_{groupby}__score",
-                n = simn,
-                num_cores = num_cores,
+                score_key=[f"DE_{grp}__score" for grp in groups],
+                perturb_key=f"DE_{groupby}__score",
+                n=simn,
+                num_cores=num_cores,
             )
-            
+
             self.add_score_statistics(
-                score_keys = {f"DE_{grp}__score": f"DE_{groupby}__score" for grp in groups}
+                score_keys={
+                    f"DE_{grp}__score": f"DE_{groupby}__score" for grp in groups
+                }
             )
         self._defrag_pandas()
 
-    def adata_combine_de_scores(self, group_key="celltype", score_key="score", suffix="", statistics=True):
+    def adata_combine_de_scores(
+        self, group_key="celltype", score_key="score", suffix="", statistics=True
+    ):
         groups = self.de_groups[group_key]
-        
-        combine = [(f"DE_{grp}__score{suffix}", f"{score_key}{suffix}") for grp in groups]
+
+        combine = [
+            (f"DE_{grp}__score{suffix}", f"{score_key}{suffix}") for grp in groups
+        ]
         self.combine_scores(combine)
-        
+
         if statistics:
             self.combine_scores_rand([(f"DE_{group_key}__score", score_key, suffix)])
 
             self.add_score_statistics(
-                score_keys = {
-                    f"min(DE_{grp}__score{suffix},{score_key}{suffix})": f"min(DE_{group_key}__score{suffix},{score_key}{suffix})" 
+                score_keys={
+                    f"min(DE_{grp}__score{suffix},{score_key}{suffix})": f"min(DE_{group_key}__score{suffix},{score_key}{suffix})"
                     for grp in groups
                 }
             )
-
 
     ###--------------------------------------------------- export
 
@@ -773,67 +884,102 @@ class SNP2CELL:
                 self.scores = pd.DataFrame(index=self.grn.nodes)
 
     def get_components(self, sel_nodes):
-        """ return connected components """
+        """return connected components"""
         G_sub = self.grn.subgraph(sel_nodes)
         cc = list(nx.connected_components(G_sub))
         print([len(x) for x in cc])
         return G_sub, cc
 
     def get_dfs(self, sel_nodes=None, **kwargs):
-        """ return pandas node and adjacency dataframes """
+        """return pandas node and adjacency dataframes"""
         adj_df = pd.DataFrame(self.grn.edges, columns=["source", "target"])
         node_df = self.get_scores(**kwargs)
-        
+
         if sel_nodes:
-            adj_df = adj_df[adj_df.source.isin(sel_nodes) & adj_df.target.isin(sel_nodes)]
+            adj_df = adj_df[
+                adj_df.source.isin(sel_nodes) & adj_df.target.isin(sel_nodes)
+            ]
             node_df = node_df[node_df.index.isin(sel_nodes)]
 
-        #TODO: this is dataset specific, move outside of class
+        # TODO: this is dataset specific, move outside of class
         node2type = {
-            **{n: "TG" for n in adj_df.target[~adj_df.target.str.match(".+:[0-9]+-[0-9+]")].unique()},
-            **{n: "TF" for n in adj_df.source[~adj_df.source.str.match(".+:[0-9]+-[0-9+]")].unique()},
-            **{n: "region" for n in adj_df.source[adj_df.source.str.match(".+:[0-9]+-[0-9+]")].unique()},
-            **{n: "region" for n in adj_df.target[adj_df.target.str.match(".+:[0-9]+-[0-9+]")].unique()},
+            **{
+                n: "TG"
+                for n in adj_df.target[
+                    ~adj_df.target.str.match(".+:[0-9]+-[0-9+]")
+                ].unique()
+            },
+            **{
+                n: "TF"
+                for n in adj_df.source[
+                    ~adj_df.source.str.match(".+:[0-9]+-[0-9+]")
+                ].unique()
+            },
+            **{
+                n: "region"
+                for n in adj_df.source[
+                    adj_df.source.str.match(".+:[0-9]+-[0-9+]")
+                ].unique()
+            },
+            **{
+                n: "region"
+                for n in adj_df.target[
+                    adj_df.target.str.match(".+:[0-9]+-[0-9+]")
+                ].unique()
+            },
         }
-        
-        adj_df["interaction_type"] = [f"{node2type[r['source']]}_{node2type[r['target']]}" for _,r in adj_df.iterrows()]
+
+        adj_df["interaction_type"] = [
+            f"{node2type[r['source']]}_{node2type[r['target']]}"
+            for _, r in adj_df.iterrows()
+        ]
         node_df["node_type"] = node_df.index.map(node2type)
 
         return node_df, adj_df
 
-    def plot_group_summary(self, std_cutoff=1, row_pattern=".*DE_(?P<rowname>.+?)__", **kwargs):
-        """ extract columns using like='' or regex='' and plot boxplot """
+    def plot_group_summary(
+        self, std_cutoff=1, row_pattern=".*DE_(?P<rowname>.+?)__", **kwargs
+    ):
+        """extract columns using like='' or regex='' and plot boxplot"""
         plt_df = self.get_scores(**kwargs)
-        plt_df = plt_df.loc[plt_df.std(axis=1) > std_cutoff,:]
+        plt_df = plt_df.loc[plt_df.std(axis=1) > std_cutoff, :]
         # plt_df = plt_df.loc[~plt_df.apply(lambda x: all(x[0]==x), axis=1),:]
-        plt_df = plt_df.apply(self._robust_z_score, axis=1)        
-        
-        plt_df = plt_df.rename(columns=lambda c: re.match(row_pattern, c).group("rowname"))
-        
+        plt_df = plt_df.apply(self._robust_z_score, axis=1)
+
+        plt_df = plt_df.rename(
+            columns=lambda c: re.match(row_pattern, c).group("rowname")
+        )
+
         sns.set(style="ticks")
         sns.set_style("whitegrid")
         sns.boxplot(
-            data = plt_df, 
-            order = plt_df.median(axis=0).sort_values(ascending=False).index.tolist(), 
-            showfliers = False, 
-            notch = True, 
-            boxprops = {'facecolor':'#3C5488FF', 'edgecolor':'none'}, 
-            medianprops = {'color':'lightblue'},
-            width = 0.7,
+            data=plt_df,
+            order=plt_df.median(axis=0).sort_values(ascending=False).index.tolist(),
+            showfliers=False,
+            notch=True,
+            boxprops={"facecolor": "#3C5488FF", "edgecolor": "none"},
+            medianprops={"color": "lightblue"},
+            width=0.7,
         )
         plt.xticks(rotation=60, horizontalalignment="right")
 
-    def plot_group_heatmap(self, std_cutoff=1, row_pattern=".*DE_(?P<rowname>.+?)__", **kwargs):
+    def plot_group_heatmap(
+        self, std_cutoff=1, row_pattern=".*DE_(?P<rowname>.+?)__", **kwargs
+    ):
         plt_df = self.get_scores(**kwargs)
-        plt_df = plt_df.loc[plt_df.std(axis=1) > std_cutoff,:]
-        plt_df = plt_df.apply(self._std_scale, axis=1)        
-        
-        plt_df = plt_df.rename(columns=lambda c: re.match(row_pattern, c).group("rowname"))
-        
-        plt_df = plt_df.loc[:,plt_df.median(axis=0).sort_values(ascending=False).index.tolist()]
+        plt_df = plt_df.loc[plt_df.std(axis=1) > std_cutoff, :]
+        plt_df = plt_df.apply(self._std_scale, axis=1)
+
+        plt_df = plt_df.rename(
+            columns=lambda c: re.match(row_pattern, c).group("rowname")
+        )
+
+        plt_df = plt_df.loc[
+            :, plt_df.median(axis=0).sort_values(ascending=False).index.tolist()
+        ]
         rows = []
         for c in plt_df:
-            rows.extend(plt_df[plt_df[c]==1].index.tolist())
-        plt_df = plt_df.loc[rows,:]
-        
+            rows.extend(plt_df[plt_df[c] == 1].index.tolist())
+        plt_df = plt_df.loc[rows, :]
+
         sns.heatmap(plt_df, cmap="mako", yticklabels=False)
