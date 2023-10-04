@@ -10,7 +10,9 @@ import typer
 from typing_extensions import Annotated
 
 import snp2cell
-from snp2cell import SNP2CELL, add_logger
+import snp2cell.util
+from snp2cell import SNP2CELL
+from snp2cell.util import add_logger
 
 app = typer.Typer(pretty_exceptions_enable=True)
 
@@ -65,7 +67,7 @@ def create_gene2pos_mapping(
 
     # query biomart to obtain genomic locations for genes
     log.info(f"query biomart host: {host}")
-    pos2gene = snp2cell.get_gene2pos_mapping(host=host, rev=True)
+    pos2gene = snp2cell.util.get_gene2pos_mapping(host=host, rev=True)
 
     # save to file
     log.info(f"save to file: {Path(pos2gene_csv).resolve()}")
@@ -125,7 +127,7 @@ def filter_summ_stats(
         gene2pos = pd.read_csv(pos2gene_csv, header=None, index_col=1)[0].to_dict()
 
     log.info(f"extract genomic locations for graph nodes")
-    nx_loc_df = snp2cell.graph_nodes_to_bed(s2c.grn, gene2pos=gene2pos)
+    nx_loc_df = snp2cell.util.graph_nodes_to_bed(s2c.grn, gene2pos=gene2pos)
 
     # filter summ stats
     log.info(f"filter summary statistics by node locations")
@@ -135,7 +137,7 @@ def filter_summ_stats(
             names=summ_stat_header.split(","),
             header=None,
         )
-    snp_filt_df = snp2cell.filter_summ_stat(
+    snp_filt_df = snp2cell.util.filter_summ_stat(
         summ_stat_path=summ_stat_bed,
         network_loc=nx_loc_df,
         summ_stat_kwargs=summ_stat_kwargs,
@@ -147,7 +149,7 @@ def filter_summ_stats(
     if ld_score_header:
         add_df_kwargs["names"] = ld_score_header.split(",")
         add_df_kwargs["header"] = None
-    snp2cell.add_col_to_bed(
+    snp2cell.util.add_col_to_bed(
         snp_filt_df,
         ld_score_bed,
         add_df_merge_on=["Chromosome", "Position", "Position"],
@@ -194,7 +196,9 @@ def score_snp(
     log.info(f"load summary statistics from {Path(summ_stat_bed).resolve()}")
     regions = [n for n in s2c.grn.nodes if n[:3] == "chr"]
     log.info(f"compute SNP scores")
-    snp_scr = snp2cell.get_snp_scores_parallel(regions, summ_stat_bed, num_cores=n_cpu)
+    snp_scr = snp2cell.util.get_snp_scores_parallel(
+        regions, summ_stat_bed, num_cores=n_cpu
+    )
 
     # translate locations to genes
     if pos2gene_csv:
@@ -202,7 +206,7 @@ def score_snp(
         pos2gene = pd.read_csv(pos2gene_csv, header=None, index_col=0)[1].to_dict()
     else:
         log.info(f"query biomart for pos2gene mapping")
-        pos2gene = snp2cell.get_gene2pos_mapping(rev=True)
+        pos2gene = snp2cell.util.get_gene2pos_mapping(rev=True)
     snp_scr = {(pos2gene[k] if k in pos2gene else k): v for k, v in snp_scr.items()}
     log.info(f"top scores: \n{pd.Series(snp_scr).sort_values(ascending=False)[:5]}")
 
