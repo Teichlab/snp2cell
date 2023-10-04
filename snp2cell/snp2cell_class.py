@@ -7,6 +7,7 @@ import random
 import re
 import textwrap
 from pathlib import Path
+from typing import Union, Optional, Any, Callable, Iterable
 
 import dill
 import matplotlib.pyplot as plt
@@ -220,7 +221,7 @@ class SNP2CELL:
     @add_logger()
     def rand_sim(
         self,
-        score_key="score",
+        score_key: Union[str, list[str]] = "score",
         perturb_key=None,
         n=1000,
         num_cores=None,
@@ -251,7 +252,11 @@ class SNP2CELL:
         )
 
     @add_logger()
-    def add_score_statistics(self, score_keys="score", log=logging.getLogger()):
+    def add_score_statistics(
+        self,
+        score_keys: Union[str, list[str], dict[str, str]] = "score",
+        log=logging.getLogger(),
+    ):
         log.info(f"adding statistics for: {score_keys}")
         if isinstance(score_keys, str):
             score_keys = [score_keys]
@@ -383,7 +388,7 @@ class SNP2CELL:
         if "method" in kwargs and kwargs["method"] == "logreg":
             de_df = get_rank_df(self.adata)
         else:
-            de_df = sc.get.rank_genes_groups_df(self.adata, group=None)
+            de_df = sc.get.rank_genes_groups_df(self.adata, group=None)  # type: ignore
 
         if rank_by == "abs":
             log.info("ranking by up- and downregulation...")
