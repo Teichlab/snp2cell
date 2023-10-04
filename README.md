@@ -8,7 +8,7 @@ Random permutations of scores are then used to evaluate the significance of high
 
 As an output, a networkx graph of the gene regulatory network with integrated scores can be used to inspect gene regulatory programs that are linked to the trait (from GWAS) on a per cell type basis.
 
-![snp2cell](documentation/snp2cell_schematic.png "snp2cell schematic")
+<img src="documentation/snp2cell_schematic.png" width="300">
 
 ## Installation
 
