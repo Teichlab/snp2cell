@@ -158,15 +158,33 @@ class SNP2CELL:
     ###--------------------------------------------------- input/output
 
     def save_obj(self, path: Union[str, os.PathLike]) -> None:
-        """deprecated"""
+        """
+        deprecated
+
+        Parameters
+        ----------
+        path :
+            Union[str:
+
+        Returns
+        -------
+        """
         with open(path, "wb") as f:
             dill.dump(self, f)
 
     def save_data(self, path: Union[str, os.PathLike]) -> None:
         """
         Save object data. Reload using `s2c = SNP2CELL(<path>)`.
-        :param path: output path for pickle file
-        :return: None
+
+        Parameters
+        ----------
+        path :
+            output path for pickle file
+
+        Returns
+        -------
+        type
+            None
         """
         data = {
             "grn": self.grn,
@@ -183,9 +201,17 @@ class SNP2CELL:
         """
         Load data into object.
 
-        :param path: input path for pickle file with data
-        :param overwrite: whether to overwrite existing data
-        :return: None
+        Parameters
+        ----------
+        path :
+            input path for pickle file with data
+        overwrite :
+            whether to overwrite existing data
+
+        Returns
+        -------
+        type
+            None
         """
         if self.scores and not overwrite:
             raise IndexError("existing data found, set overwrite=True to discard it.")
@@ -199,15 +225,26 @@ class SNP2CELL:
         self.de_groups = data["de_groups"]
 
     def add_grn_from_pandas(self, adjacency_df):
-        """not implemented"""
+        """
+        not implemented
+        """
         pass
 
     def add_grn_from_networkx(self, nx_grn: nx.Graph, overwrite: bool = False) -> None:
         """
         Add GRN from networkx object to snp2cell object.
-        :param nx_grn: networkx object
-        :param overwrite: whether to overwrite existing networkx object
-        :return: None
+
+        Parameters
+        ----------
+        nx_grn :
+            networkx object
+        overwrite :
+            whether to overwrite existing networkx object
+
+        Returns
+        -------
+        type
+            None
         """
         if self.scores and not overwrite:
             raise IndexError(
@@ -224,9 +261,17 @@ class SNP2CELL:
         """
         Add scanpy AnnData to snp2cell object.
 
-        :param adata: scnapy AnnData object
-        :param overwrite: whether to overwrite existing AnnData object
-        :return: None
+        Parameters
+        ----------
+        adata :
+            scnapy AnnData object
+        overwrite :
+            whether to overwrite existing AnnData object
+
+        Returns
+        -------
+        type
+            None
         """
         if self.adata is not None and not overwrite:
             raise IndexError("linked adata found, set overwrite=True to replace.")
@@ -247,13 +292,25 @@ class SNP2CELL:
         """
         Add a score to the object. Optionally propagate the score and calculate permutation statistics.
 
-        :param score_dct: dictionary with score values
-        :param score_key: key under which to store the scores
-        :param propagate: whether to propagate the scores
-        :param statistics: whether to calculate statistics
-        :param num_cores: number of cores to use
-        :param log: logger
-        :return: None
+        Parameters
+        ----------
+        score_dct :
+            dictionary with score values
+        score_key :
+            key under which to store the scores
+        propagate :
+            whether to propagate the scores
+        statistics :
+            whether to calculate statistics
+        num_cores :
+            number of cores to use
+        log :
+            logger
+
+        Returns
+        -------
+        type
+            None
         """
         self._check_init()
         log.info(f"adding score: {score_key}")
@@ -278,8 +335,16 @@ class SNP2CELL:
     def propagate_score(self, score_key: str = "score") -> tuple[str, dict[str, float]]:
         """
         Propagate score.
-        :param score_key: key under which the score is stored.
-        :return: tuple of the score key and dict with score values after propagation
+
+        Parameters
+        ----------
+        score_key :
+            key under which the score is stored.
+
+        Returns
+        -------
+        type
+            tuple of the score key and dict with score values after propagation
         """
         self._check_init()
         scr_dct = self.scores[score_key].to_dict()  # type: ignore
@@ -295,10 +360,20 @@ class SNP2CELL:
     ) -> None:
         """
         Propagate multiple scores.
-        :param score_keys: keys under which the scores are stored
-        :param num_cores: number of cores to use
-        :param log: logger
-        :return: None
+
+        Parameters
+        ----------
+        score_keys :
+            keys under which the scores are stored
+        num_cores :
+            number of cores to use
+        log :
+            logger
+
+        Returns
+        -------
+        type
+            None
         """
         self._check_init()
         use_scores = set(score_keys)
@@ -328,12 +403,24 @@ class SNP2CELL:
     ) -> None:
         """
         Create random permutations and propagate them.
-        :param score_key: key of score for which to compute statistics
-        :param perturb_key: key under which to store permutation results
-        :param n: number of permutation to create (default: 1000)
-        :param num_cores: number of cores to use
-        :param log: logger
-        :return: None
+
+        Parameters
+        ----------
+        score_key :
+            key of score for which to compute statistics
+        perturb_key :
+            key under which to store permutation results
+        n :
+            number of permutation to create (default: 1000)
+        num_cores :
+            number of cores to use
+        log :
+            logger
+
+        Returns
+        -------
+        type
+            None
         """
         self._check_init()
         log.info(f"create {n} permutations of score {score_key}")
@@ -368,9 +455,18 @@ class SNP2CELL:
     ) -> None:
         """
         Calculate statistics from random permutations for scores
-        :param score_keys: scores for which to calculate statistics. May be a single score, a list of scores or a dictionary ({<score_key>: <perturb_key>}). If not a dictionary assuming `score_key==perturb_key`.
-        :param log: logger
-        :return: None
+
+        Parameters
+        ----------
+        score_keys :
+            scores for which to calculate statistics. May be a single score, a list of scores or a dictionary ({<score_key>: <perturb_key>}). If not a dictionary assuming `score_key==perturb_key`.
+        log :
+            logger
+
+        Returns
+        -------
+        type
+            None
         """
         self._check_init()
         log.info(f"adding statistics for: {score_keys}")
@@ -437,10 +533,19 @@ class SNP2CELL:
         Currently, the only implemented option for combining the scores is min(score1, score2).
         New scores will be added, called `min(<key1>,<key2>)` for each score pair.
 
-        :param combine: a list of pairs of scores to combine
-        :param scale: whether to scale scores between 0 and 1 before combining
-        :param log: logger
-        :return: None
+        Parameters
+        ----------
+        combine :
+            a list of pairs of scores to combine
+        scale :
+            whether to scale scores between 0 and 1 before combining
+        log :
+            logger
+
+        Returns
+        -------
+        type
+            None
         """
         self._check_init()
         log.info(f"combining scores: {combine}")
@@ -469,10 +574,19 @@ class SNP2CELL:
         Create random permutation background for combined scores.
         Currently, the only implemented option for combining the scores is min(score1, score2).
 
-        :param combine: list of score pairs for which to create random permutation background. This is a list of triples, also containing an optional suffix for each pair. Currently, the only allowed suffix is "__zscore" (which will combine zscores instead of using permuted scores directly).
-        :param scale: whether to scale scores between 0 and 1 before combining
-        :param log: logger
-        :return: None
+        Parameters
+        ----------
+        combine :
+            list of score pairs for which to create random permutation background. This is a list of triples, also containing an optional suffix for each pair. Currently, the only allowed suffix is "__zscore" (which will combine zscores instead of using permuted scores directly).
+        scale :
+            whether to scale scores between 0 and 1 before combining
+        log :
+            logger
+
+        Returns
+        -------
+        type
+            None
         """
         log.info(f"combining scores: {combine}")
         for key1, key2, suffix in combine:
@@ -529,16 +643,31 @@ class SNP2CELL:
         Computed marker genes are used as scores and propagated.
         Optionally, statistics are calculated based on random permutations.
 
-        :param groupby: column name in adata.obs with cell type labels
-        :param check: whether to check the anndata object
-        :param topn: use the topn marker genes per cell type (default: 500)
-        :param simn: how many permutation to compute (default: 1000)
-        :param statistics: whether to compute permutation results
-        :param num_cores: number of cores to use
-        :param log: logger
-        :param rank_by: rank genes by upregulation ("up"), downregulation ("down") or absolute value ("abs")
-        :param kwargs: arguments passed to `sc.tl.rank_genes_groups()`
-        :return: None
+        Parameters
+        ----------
+        groupby :
+            column name in adata.obs with cell type labels
+        check :
+            whether to check the anndata object
+        topn :
+            use the topn marker genes per cell type (default: 500)
+        simn :
+            how many permutation to compute (default: 1000)
+        statistics :
+            whether to compute permutation results
+        num_cores :
+            number of cores to use
+        log :
+            logger
+        rank_by :
+            rank genes by upregulation ("up"), downregulation ("down") or absolute value ("abs")
+        kwargs :
+            arguments passed to `sc.tl.rank_genes_groups()`
+
+        Returns
+        -------
+        type
+            None
         """
         self._check_init(check_adata=True)
         if check:
@@ -615,11 +744,21 @@ class SNP2CELL:
         """
         Combine differential expression based scores with other scores. E.g. combine them with GWAS based scores.
 
-        :param group_key: column name of adata.obs with cell type labels that was used to derive marker genes
-        :param score_key: score key to combine the DE scores with. E.g. may be a score key for a GWAS based score.
-        :param suffix: suffix to use for combining scores. E.g. may be "__zscore" to combine zscores instead of directly combining the propagated scores.
-        :param statistics: whether to calculate statistics based on random perturbation background.
-        :return: None
+        Parameters
+        ----------
+        group_key :
+            column name of adata.obs with cell type labels that was used to derive marker genes
+        score_key :
+            score key to combine the DE scores with. E.g. may be a score key for a GWAS based score.
+        suffix :
+            suffix to use for combining scores. E.g. may be "__zscore" to combine zscores instead of directly combining the propagated scores.
+        statistics :
+            whether to calculate statistics based on random perturbation background.
+
+        Returns
+        -------
+        type
+            None
         """
         groups = self.de_groups[group_key]
 
@@ -650,11 +789,21 @@ class SNP2CELL:
         """
         Get scores.
 
-        :param which: type ob scores to retrieve. Can be "original" (before propagation), "propagated" (after propagation) or "perturbed" (random permutations).
-        :param query: pandas query string (`pd.DataFrame.query()`) that can be used to subset the returned data frame
-        :param sort_key: column name that can be used to sort the returned data frame (in descending order)
-        :param kwargs: options passed to `pd.filter(**kwargs)` for filtering columns of the returned data frame
-        :return: a pandas data frame with selected scores
+        Parameters
+        ----------
+        which :
+            type ob scores to retrieve. Can be "original" (before propagation), "propagated" (after propagation) or "perturbed" (random permutations).
+        query :
+            pandas query string (`pd.DataFrame.query()`) that can be used to subset the returned data frame
+        sort_key :
+            column name that can be used to sort the returned data frame (in descending order)
+        kwargs :
+            options passed to `pd.filter(**kwargs)` for filtering columns of the returned data frame
+
+        Returns
+        -------
+        type
+            a pandas data frame with selected scores
         """
         self._check_init()
         scores_out = {
@@ -680,9 +829,18 @@ class SNP2CELL:
     def remove_scores(self, which: str = "propagated", **kwargs: Any) -> None:
         """
         Delete selected scores from the object.
-        :param which: type ob scores to retrieve. Can be "original" (before propagation), "propagated" (after propagation) or "perturbed" (random permutations).
-        :param kwargs: options passed to `pd.filter(**kwargs)` for selecting columns to DROP
-        :return: None
+
+        Parameters
+        ----------
+        which :
+            type ob scores to retrieve. Can be "original" (before propagation), "propagated" (after propagation) or "perturbed" (random permutations).
+        kwargs :
+            options passed to `pd.filter(**kwargs)` for selecting columns to DROP
+
+        Returns
+        -------
+        type
+            None
         """
         self._check_init()
         if which == "perturbed":
@@ -706,8 +864,15 @@ class SNP2CELL:
         """
         Return connected components after subsetting the networkx graph.
 
-        :param sel_nodes: nodes to select for subsetting
-        :return: a tuple of the subsetted graph and a list of connected components (sets of nodes)
+        Parameters
+        ----------
+        sel_nodes :
+            nodes to select for subsetting
+
+        Returns
+        -------
+        type
+            a tuple of the subsetted graph and a list of connected components (sets of nodes)
         """
         self._check_init()
         G_sub = self.grn.subgraph(sel_nodes)  # type: ignore
@@ -722,9 +887,17 @@ class SNP2CELL:
         Return pandas data frames with nodes and edges.
         These can e.g. be used for import into Cytoscape or other software.
 
-        :param sel_nodes: nodes for subsetting before creating data frames
-        :param kwargs: options passed to `get_scores(**kwargs)`
-        :return: a tuple of node table and edge table as pandas data frames
+        Parameters
+        ----------
+        sel_nodes :
+            nodes for subsetting before creating data frames
+        kwargs :
+            options passed to `get_scores(**kwargs)`
+
+        Returns
+        -------
+        type
+            a tuple of node table and edge table as pandas data frames
         """
         self._check_init()
         adj_df = pd.DataFrame(self.grn.edges, columns=["source", "target"])  # type: ignore
@@ -788,12 +961,20 @@ class SNP2CELL:
         """
         Plot scores aggregated across all nodes.
 
-        :param std_cutoff: cutoff on standard deviation for selecting nodes with larger variation across scores
-        :param row_pattern: regex for extracting names for plotting from the score names (default: ".*DE_(?P<rowname>.+?)__")
-        :param kwargs: options passed to `get_scores(**kwargs)`
-        :return: None
+        Parameters
+        ----------
+        std_cutoff :
+            cutoff on standard deviation for selecting nodes with larger variation across scores
+        row_pattern :
+            regex for extracting names for plotting from the score names (default: ".*DE_(?P<rowname>.+?)__")
+        kwargs :
+            options passed to `get_scores(**kwargs)`
+
+        Returns
+        -------
+        type
+            None
         """
-        """extract columns using like='' or regex='' and plot boxplot"""
         plt_df: pd.DataFrame
         plt_df = self.get_scores(**kwargs)
         plt_df = plt_df.loc[plt_df.std(axis=1) > std_cutoff, :]
@@ -824,10 +1005,19 @@ class SNP2CELL:
         """
         Plot scores.
 
-        :param std_cutoff: cutoff on standard deviation for selecting nodes with larger variation across scores
-        :param row_pattern: regex for extracting names for plotting from the score names (default: ".*DE_(?P<rowname>.+?)__")
-        :param kwargs: options passed to `get_scores(**kwargs)`
-        :return: None
+        Parameters
+        ----------
+        std_cutoff :
+            cutoff on standard deviation for selecting nodes with larger variation across scores
+        row_pattern :
+            regex for extracting names for plotting from the score names (default: ".*DE_(?P<rowname>.+?)__")
+        kwargs :
+            options passed to `get_scores(**kwargs)`
+
+        Returns
+        -------
+        type
+            None
         """
         plt_df: pd.DataFrame
         plt_df = self.get_scores(**kwargs)

@@ -24,8 +24,14 @@ F = typing.TypeVar("F", bound=typing.Callable[..., typing.Any])
 def set_num_cpu(n: int) -> None:
     """
     Globally set the number of CPUs.
-    :rtype: None
-    :param n: number of CPUs
+
+    Parameters
+    ----------
+    n : int
+        number of CPUs
+
+    Returns
+    -------
     """
     snp2cell.NCPU = n
 
@@ -34,7 +40,13 @@ def add_logger(show_start_end: bool = True) -> typing.Callable[[F], F]:
     """
     Decorator to add logging to a function or method.
 
-    :param show_start_end: display a message when entering and leaving the function or method.
+    Parameters
+    ----------
+    show_start_end : bool
+        display a message when entering and leaving the function or method. (Default value = True)
+
+    Returns
+    -------
     """
 
     def _add_logger(f):
@@ -96,14 +108,27 @@ def loop_parallel(
     """
     loop over input list and apply a function in parallel.
 
-    :param loop_iter: list with inputs to `func`
-    :param func: function to apply to each list element
-    :param num_cores: number of cores to use
-    :param total: total number of iterations
-    :param log: logger object
-    :param args: position arguments passed to `func`
-    :param kwargs: kwargs passed to `func`
-    :return: list with output values
+    Parameters
+    ----------
+    loop_iter : typing.Iterable
+        list with inputs to `func`
+    func : typing.Callable
+        function to apply to each list element
+    num_cores : typing.Optional[int]
+        number of cores to use (Default value = None)
+    total : typing.Optional[int]
+        total number of iterations (Default value = None)
+    log : logging.Logger (Default value = logging.getLogger())
+        logger object
+    args :
+        position arguments passed to `func`
+    kwargs :
+        kwargs passed to `func`
+
+    Returns
+    -------
+    type
+        list with output values
     """
     if not num_cores:
         num_cores = snp2cell.NCPU
@@ -122,10 +147,19 @@ def get_gene2pos_mapping(
     """
     query biomart to get a mapping of gene symbols to genomic locations (largest range).
 
-    :param host: biomart host, change to use archived versions (default: "http://www.ensembl.org")
-    :param chrs: chromosomes to use (default: 1-22)
-    :param rev: reverse the dictionary and return {<genomic location>: <gene symbol>}
-    :return: a dictionary {<gene symbol>: <genomic location>}
+    Parameters
+    ----------
+    host : typing.Optional[str]
+        biomart host, change to use archived versions (default: "http://www.ensembl.org")
+    chrs : typing.Optional[list]
+        chromosomes to use (default: 1-22)
+    rev : bool
+        reverse the dictionary and return {<genomic location>: <gene symbol>} (Default value = False)
+
+    Returns
+    -------
+    type
+        a dictionary {<gene symbol>: <genomic location>}
     """
     import pybiomart
 
@@ -178,12 +212,22 @@ def graph_nodes_to_bed(
 ) -> typing.Optional[pd.DataFrame]:
     """
     create a BED file / return a dataframe with genomic locations for nodes in `nx_graph`
-    :param nx_graph: a networkx graph
-    :param gene2pos: a dict with gene symbol to genomic location mapping (default: query biomart latest version)
-    :param chrs: chromosomes to use (default: 1-22)
-    :param out_path: output path for BED file
-    :param return_df: whether to return a data frame
-    :return:
+
+    Parameters
+    ----------
+    nx_graph : nx.Graph
+        a networkx graph
+    gene2pos : typing.Optional[dict[str, str]]
+        a dict with gene symbol to genomic location mapping (default: query biomart latest version)
+    chrs : typing.Optional[list[str]]
+        chromosomes to use (default: 1-22)
+    out_path : typing.Optional[str] (Default value = None)
+        output path for BED file
+    return_df : bool
+        whether to return a data frame (Default value = True)
+
+    Returns
+    -------
     """
     chrs = chrs or [str(i + 1) for i in range(22)]
 
@@ -233,13 +277,25 @@ def filter_summ_stat(
     filter CSV file with summary statistics `summ_stat_path` to those overlapping locations in another file `network_loc`.
     Write results to a new file `out_path`.
 
-    :param summ_stat_path: path to CSV file with summary statistics
-    :param network_loc: path to CSV file with genomic locations of network nodes
-    :param out_path: path for output CSV file
-    :param return_df: whether to return a pandas data frame
-    :param summ_stat_kwargs: kwargs passed to `pd.read_table(summ_stat_path, ...)`
-    :param network_loc_kwargs: kwargs passed to `pd.read_table(network_loc, ...)`
-    :return: None or pandas `DataFrame`
+    Parameters
+    ----------
+    summ_stat_path : typing.Union[str, os.PathLike]
+        path to CSV file with summary statistics
+    network_loc : typing.Union[str,os.PathLike,pd.DataFrame]
+        path to CSV file with genomic locations of network nodes
+    out_path : typing.Optional[typing.Union[str,os.PathLike]]
+        path for output CSV file
+    return_df : bool
+        whether to return a pandas data frame (Default value = True)
+    summ_stat_kwargs : typing.Optional[dict]
+        kwargs passed to `pd.read_table(summ_stat_path, ...)`
+    network_loc_kwargs : typing.Optional[dict]
+        kwargs passed to `pd.read_table(network_loc, ...)`
+
+    Returns
+    -------
+    type
+        None or pandas `DataFrame`
     """
     import pyranges
 
@@ -283,17 +339,33 @@ def add_col_to_bed(
     Optionally rename columns, drop columns or filter columns to selection.
     Write resulting table to CSV and/or return pandas `DataFrame`.
 
-    :param bed: path to CSV file or pandas data frame
-    :param add_df: path to CSV file or pandas data frame
-    :param add_df_merge_on: columns in `add_df` specifying chromosome, start and end position
-    :param rename: rename columns
-    :param drop: drop columns
-    :param filter: filter to selection of columns
-    :param out_path: path for output dataframe as CSV file
-    :param return_df: whether to return a pandas `DataFrame`
-    :param bed_kwargs: kwargs passed to `pd.read_table(bed, **bed_kwargs)`
-    :param add_df_kwargs: kwargs passed to `pd.read_table(add_df, **add_df_kwargs)`
-    :return: None or a pandas data frame
+    Parameters
+    ----------
+    bed :
+        path to CSV file or pandas data frame
+    add_df :
+        path to CSV file or pandas data frame
+    add_df_merge_on :
+        columns in `add_df` specifying chromosome, start and end position
+    rename :
+        rename columns
+    drop :
+        drop columns
+    filter :
+        filter to selection of columns
+    out_path :
+        path for output dataframe as CSV file
+    return_df :
+        whether to return a pandas `DataFrame`
+    bed_kwargs :
+        kwargs passed to `pd.read_table(bed, **bed_kwargs)`
+    add_df_kwargs :
+        kwargs passed to `pd.read_table(add_df, **add_df_kwargs)`
+
+    Returns
+    -------
+    type
+        None or a pandas data frame
     """
     if isinstance(bed, (str, os.PathLike)):
         bed = pd.read_table(bed, **bed_kwargs)
@@ -326,8 +398,15 @@ def get_reg_srt_keys(reg: str) -> tuple[int, int, int]:
     from a genomic location string "(chr)?(?P<chr>.+):(?P<start>[0-9]+)-(?P<end>[0-9]+)"
     extract chromosome, start and end position (e.g. to be used for sorting).
 
-    :param reg: genomic location string
-    :return: int tuple of (<chromosome>, <start>, <end>)
+    Parameters
+    ----------
+    reg :
+        genomic location string
+
+    Returns
+    -------
+    type
+        int tuple of (<chromosome>, <start>, <end>)
     """
     m = re.match("(chr)?(?P<chr>.+):(?P<start>[0-9]+)-(?P<end>[0-9]+)", reg)
     if m:
@@ -349,11 +428,21 @@ def get_snp_scores(
     """
     read CSV file with summary statistics and compute a score for each SNP.
 
-    :param regions: list of region strings (like "chr1:234-245")
-    :param summ_stat_bed_path: bath to BED file with summary statistics
-    :param progress: show progress bar
-    :param kwargs: kwargs for `pd.read_table(summ_stat_bed_path, **kwargs)`
-    :return: dictionary with a score for each genomic location
+    Parameters
+    ----------
+    regions :
+        list of region strings (like "chr1:234-245")
+    summ_stat_bed_path :
+        bath to BED file with summary statistics
+    progress :
+        show progress bar
+    kwargs :
+        kwargs for `pd.read_table(summ_stat_bed_path, **kwargs)`
+
+    Returns
+    -------
+    type
+        dictionary with a score for each genomic location
     """
 
     def get_snp_score(df):
@@ -422,12 +511,23 @@ def get_snp_scores_parallel(
     """
     read CSV file with summary statistics and compute a score for each SNP in parallel.
 
-    :param regions: list of region strings (like "chr1:234-245")
-    :param summ_stat_bed_path: bath to BED file with summary statistics
-    :param num_cores: number of cores to use (default: 8)
-    :param chunk_size: chunk size of regions passed to each core at once
-    :param kwargs: kwargs for `pd.read_table(summ_stat_bed_path, **kwargs)`
-    :return: dictionary with a score for each genomic location
+    Parameters
+    ----------
+    regions :
+        list of region strings (like "chr1:234-245")
+    summ_stat_bed_path :
+        bath to BED file with summary statistics
+    num_cores :
+        number of cores to use (default: 8)
+    chunk_size :
+        chunk size of regions passed to each core at once
+    kwargs :
+        kwargs for `pd.read_table(summ_stat_bed_path, **kwargs)`
+
+    Returns
+    -------
+    type
+        dictionary with a score for each genomic location
     """
     region_chunks = [
         regions[i : i + chunk_size] for i in range(0, len(regions), chunk_size)
@@ -455,10 +555,19 @@ def get_rank_df(
     """
     Get minimal pandas df for `rank_genes_groups` results for a specific group (also works for method='logreg').
 
-    :param adata: scanpy `AnnData` object with `rank_genes_groups` results
-    :param key: key under which `rank_genes_groups` results are stored in `adata`
-    :param colnames: columns to extract from `rank_genes_groups` results
-    :return: a pandas data frame
+    Parameters
+    ----------
+    adata :
+        scanpy `AnnData` object with `rank_genes_groups` results
+    key :
+        key under which `rank_genes_groups` results are stored in `adata`
+    colnames :
+        columns to extract from `rank_genes_groups` results
+
+    Returns
+    -------
+    type
+        a pandas data frame
     """
     return (
         pd.concat(
@@ -478,8 +587,15 @@ def load_snp2cell(path: typing.Union[str, os.PathLike]) -> object:
     """
     Load a SNP2CELL object.
 
-    :param path: path to saved object
-    :return: SNP2CELL object
+    Parameters
+    ----------
+    path :
+        path to saved object
+
+    Returns
+    -------
+    type
+        SNP2CELL object
     """
     with open(path, "rb") as f:
         return dill.load(f)
