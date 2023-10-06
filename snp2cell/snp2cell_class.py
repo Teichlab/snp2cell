@@ -159,7 +159,7 @@ class SNP2CELL:
 
     def save_obj(self, path: Union[str, os.PathLike]) -> None:
         """
-        deprecated
+        deprecated, use `SNP2CELL.save_data()` instead.
 
         Parameters
         ----------

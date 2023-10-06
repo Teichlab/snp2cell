@@ -10,6 +10,9 @@ Welcome to snp2cell's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   installation
+   Example <example.ipynb>
+   api
 
 
 Indices and tables
