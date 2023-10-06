@@ -7,6 +7,6 @@ build/
 snp2cell.egg-info/
 .idea/
 .DS_Store
-documentation/snp2cell_schematic.pdf
 data/
 .pybiomart.sqlite
+docs/assets/snp2cell_schematic.pdf
