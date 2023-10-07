@@ -87,7 +87,7 @@ class SNP2CELL:
             "original": self.scores,
             "perturbed": self.scores_rand,
         }[which]
-        if not scores_out:
+        if scores_out is None:
             raise ValueError("Initialise scores first.")
         scr: Union[pd.DataFrame, pd.Series]
         if score_key:
@@ -136,7 +136,11 @@ class SNP2CELL:
         )
 
     def _defrag_pandas(self) -> None:
-        assert self.scores and self.scores_prop and self.scores_rand
+        assert (
+            self.scores is not None
+            and self.scores_prop is not None
+            and self.scores_rand
+        )
         self.scores = self.scores.copy()
         self.scores_prop = self.scores_prop.copy()
         for k in self.scores_rand.keys():
@@ -144,11 +148,11 @@ class SNP2CELL:
         gc.collect()
 
     def _check_init(self, check_adata: bool = False) -> None:
-        if not self.scores or not self.scores_prop or not self.scores_rand:
+        if self.scores is None or self.scores_prop is None or self.scores_rand is None:
             raise ValueError("Need to init scores first.")
-        if not self.grn:
+        if self.grn is None:
             raise ValueError("Need to set GRN first.")
-        if check_adata and not self.adata:
+        if check_adata and self.adata is None:
             raise ValueError("Need to add AnnData first")
 
     ###--------------------------------------------------- input/output
@@ -297,6 +301,13 @@ class SNP2CELL:
         :return: None
         """
         self._check_init()
+        use_scores = set(score_keys)
+        for k in score_keys:
+            if self.scores[k].sum() == 0:
+                use_scores -= {k}
+                log.warning(f"score {k} is all zero, skipping")
+        score_keys = list(use_scores)
+
         log.info(f"propagating scores: {score_keys}")
         prop_scores = loop_parallel(
             score_keys, self.propagate_score, num_cores=num_cores
@@ -570,23 +581,27 @@ class SNP2CELL:
             scr = de_df.query(query_str).set_index("names")["scores"][:topn].to_dict()
 
             scr_key = f"DE_{grp}__score"
+
             self.add_score(scr, score_key=scr_key, propagate=False, statistics=False)
-            score_keys.append(scr_key)
+
+            if self.scores[scr_key].sum() == 0:
+                log.warning(f"score for '{grp}' ('{groupby}') is all zero, ignoring")
+                self.de_groups[groupby].remove(grp)
+            else:
+                score_keys.append(scr_key)
 
         self.propagate_scores(score_keys, num_cores=num_cores)
 
         if statistics:
             self.rand_sim(
-                score_key=[f"DE_{grp}__score" for grp in groups],
+                score_key=score_keys,
                 perturb_key=f"DE_{groupby}__score",
                 n=simn,
                 num_cores=num_cores,
             )
 
             self.add_score_statistics(
-                score_keys={
-                    f"DE_{grp}__score": f"DE_{groupby}__score" for grp in groups
-                }
+                score_keys={k: f"DE_{groupby}__score" for k in score_keys}
             )
         self._defrag_pandas()
 
@@ -757,6 +772,13 @@ class SNP2CELL:
 
         return node_df, adj_df
 
+    @staticmethod
+    def rename_column(c: str, row_pattern: str = ".*DE_(?P<rowname>.+?)__") -> str:
+        m = re.match(row_pattern, c)
+        if not m:
+            raise ValueError(f"could not match {c}")
+        return m.group("rowname")
+
     def plot_group_summary(
         self,
         std_cutoff: float = 1,
@@ -778,13 +800,7 @@ class SNP2CELL:
         # plt_df = plt_df.loc[~plt_df.apply(lambda x: all(x[0]==x), axis=1),:]
         plt_df = plt_df.apply(self._robust_z_score, axis=1)
 
-        def rename_func(c):
-            m = re.match(row_pattern, c)
-            if not m:
-                raise ValueError(f"could not match {c}")
-            return m.group("rowname")
-
-        plt_df = plt_df.rename(columns=rename_func)
+        plt_df = plt_df.rename(columns=self.rename_column)
 
         sns.set(style="ticks")
         sns.set_style("whitegrid")
@@ -818,13 +834,7 @@ class SNP2CELL:
         plt_df = plt_df.loc[plt_df.std(axis=1) > std_cutoff, :]
         plt_df = plt_df.apply(self._std_scale, axis=1)
 
-        def rename_func(c):
-            m = re.match(row_pattern, c)
-            if not m:
-                raise ValueError(f"could not match {c}")
-            return m.group("rowname")
-
-        plt_df = plt_df.rename(columns=rename_func)
+        plt_df = plt_df.rename(columns=self.rename_column)
 
         plt_df = plt_df.loc[
             :, plt_df.median(axis=0).sort_values(ascending=False).index.tolist()

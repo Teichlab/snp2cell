@@ -11,8 +11,7 @@ import typer  # type: ignore
 from typing_extensions import Annotated
 
 import snp2cell
-import snp2cell.util
-from snp2cell import SNP2CELL
+from snp2cell.snp2cell_class import SNP2CELL
 from snp2cell.util import add_logger
 
 app = typer.Typer(pretty_exceptions_enable=True)
@@ -76,15 +75,19 @@ def create_gene2pos_mapping(
 @app.command()
 @add_logger()
 def filter_summ_stats(
-    s2c_obj: Annotated[Path, typer.Argument(help="path to SNP2CELL object")],
+    s2c_obj: Annotated[
+        typing.Union[str, Path], typer.Argument(help="path to SNP2CELL object")
+    ],
     summ_stat_bed: Annotated[
-        Path, typer.Argument(help="path to tsv file with summary statistics")
+        typing.Union[str, Path],
+        typer.Argument(help="path to tsv file with summary statistics"),
     ],
     ld_score_bed: Annotated[
-        Path, typer.Argument(help="path to tsv file with ld scores")
+        typing.Union[str, Path], typer.Argument(help="path to tsv file with ld scores")
     ],
     out_name: Annotated[
-        Path, typer.Argument(help="output path for filtered summary statistics")
+        typing.Union[str, Path],
+        typer.Argument(help="output path for filtered summary statistics"),
     ],
     summ_stat_header: Annotated[
         typing.Optional[str], typer.Option(help="comma separated string with header")
@@ -93,7 +96,7 @@ def filter_summ_stats(
         typing.Optional[str], typer.Option(help="comma separated string with header")
     ] = None,
     pos2gene_csv: Annotated[
-        typing.Optional[Path],
+        typing.Optional[typing.Union[str, Path]],
         typer.Option(
             "--pos2gene",
             "-p",
@@ -125,7 +128,7 @@ def filter_summ_stats(
 
     log.info("extract genomic locations for graph nodes")
     nx_loc_df = snp2cell.util.graph_nodes_to_bed(s2c.grn, gene2pos=gene2pos)
-    assert nx_loc_df
+    assert nx_loc_df is not None
 
     # filter summ stats
     log.info("filter summary statistics by node locations")
@@ -140,11 +143,11 @@ def filter_summ_stats(
         network_loc=nx_loc_df,
         summ_stat_kwargs=summ_stat_kwargs,
     )
-    assert snp_filt_df
+    assert snp_filt_df is not None
 
     # add LD scores
     log.info("add LD score locations and save")
-    add_df_kwargs: dict[str, typing.Union[int, list[str], None]] = {"index_col": 0}
+    add_df_kwargs: dict[str, typing.Union[int, list[str], None]] = {}
     if ld_score_header:
         add_df_kwargs["names"] = ld_score_header.split(",")
         add_df_kwargs["header"] = None
@@ -327,7 +330,6 @@ def score_de(
     """
     Add an anndata object to the s2c object, find differentially expressed genes and propagate the gene scores across the network.
     Then the DE scores and previously computed SNP scores are combined and statistics are computed based on random permutations.
-
     """
     # load anndata
     log.info(f"load anndata from {Path(anndata).resolve()}")
