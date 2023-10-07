@@ -11,7 +11,8 @@ Welcome to snp2cell's documentation!
    :caption: Contents:
 
    installation
-   Example <example.ipynb>
+   toy example <toy_example.ipynb>
+   pbmc example <pbmc_example.ipynb>
    api
 
 
