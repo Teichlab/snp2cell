@@ -1,3 +1,5 @@
+![example workflow](https://github.com/Teichlab/snp2cell/actions/workflows/main.yml/badge.svg)
+
 # snp2cell
 
 `snp2cell` is a package for identifying gene regulation involved in specific traits and cell types.
