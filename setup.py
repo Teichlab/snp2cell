@@ -29,6 +29,7 @@ setup(
         "typing_extensions",
         "rich",
         "dill",
+        "pytest",
     ],
     python_requires=">=3.5, <3.12",
     classifiers=[
