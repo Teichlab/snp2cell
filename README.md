@@ -14,7 +14,7 @@ As an output, a networkx graph of the gene regulatory network with integrated sc
 
 ## Installation
 
-Optional: create and activate a new conda environment (with python<3.12):
+*Optional: create and activate a new conda environment (with python<3.12):*
 ```commandline
 mamba create -n snp2cell python<3.12
 mamba activate snp2cell
@@ -25,20 +25,27 @@ Install snp2cell:
 pip install git+ssh://git@github.com/JPatrickPett/snp2cell.git
 ```
 
-Optional: activate autocompletion for the command line tool.
+## Usage
+
+snp2cell can be imported as a python module (see [notebooks](https://github.com/Teichlab/snp2cell/edit/main/README.md#Example-notebooks) for examples).
+
+Additionally, there is also a command line interface:
+```commandline
+snp2cell --help
+```
+
+Optionally, activate autocompletion for the command line tool.
 E.g. for bash run:
 ```commandline
 snp2cell --install-completion bash
 . ~/.bashrc
 ```
 
-More help:
-```commandline
-snp2cell --help
-```
+## Example notebooks
 
-## Quickstart
+- [toy example](https://github.com/Teichlab/snp2cell/blob/main/docs/source/toy_example.ipynb)
+- [pbmc example](https://github.com/Teichlab/snp2cell/blob/main/docs/source/pbmc_example.ipynb)
 
-```commandline
-#TODO
-```
+## Citation
+
+*to be added*
