@@ -11,6 +11,7 @@ import typer  # type: ignore
 from typing_extensions import Annotated
 
 import snp2cell
+from snp2cell.recipes import filter_summ_stat_file
 from snp2cell.snp2cell_class import SNP2CELL
 from snp2cell.util import add_logger
 
@@ -47,7 +48,7 @@ def create_object(
 @add_logger()
 def create_gene2pos_mapping(
     pos2gene_csv: Annotated[
-        typing.Union[str, Path],
+        Path,
         typer.Argument(help="output path for csv file with mapping"),
     ] = "pos2gene.csv",
     host: Annotated[
@@ -73,20 +74,17 @@ def create_gene2pos_mapping(
 
 
 @app.command()
-@add_logger()
 def filter_summ_stats(
-    s2c_obj: Annotated[
-        typing.Union[str, Path], typer.Argument(help="path to SNP2CELL object")
-    ],
+    s2c_obj: Annotated[Path, typer.Argument(help="path to SNP2CELL object")],
     summ_stat_bed: Annotated[
-        typing.Union[str, Path],
+        Path,
         typer.Argument(help="path to tsv file with summary statistics"),
     ],
     ld_score_bed: Annotated[
-        typing.Union[str, Path], typer.Argument(help="path to tsv file with ld scores")
+        Path, typer.Argument(help="path to tsv file with ld scores")
     ],
     out_name: Annotated[
-        typing.Union[str, Path],
+        Path,
         typer.Argument(help="output path for filtered summary statistics"),
     ],
     summ_stat_header: Annotated[
@@ -96,14 +94,13 @@ def filter_summ_stats(
         typing.Optional[str], typer.Option(help="comma separated string with header")
     ] = None,
     pos2gene_csv: Annotated[
-        typing.Optional[typing.Union[str, Path]],
+        typing.Optional[Path],
         typer.Option(
             "--pos2gene",
             "-p",
             help="csv file with no header and location (chrX:XXX-XXX) to gene symbol mapping; default: retrieve from biomart",
         ),
     ] = None,
-    log=logging.getLogger(),
 ):
     """
     Filter a file with summary statistics by the genomic locations of network nodes in s2c object and merge
@@ -116,48 +113,14 @@ def filter_summ_stats(
     `ld_score_bed` needs to be a bed style tsv file with a header and at least these columns:
     ["Chromosome", "Position", "L2"]
     """
-    # load object
-    log.info("load SNP2CELL object")
-    s2c = SNP2CELL(s2c_obj)
-
-    # get network locations
-    gene2pos = None
-    if pos2gene_csv:
-        log.info(f"get pos2gene mapping from file: {Path(pos2gene_csv).resolve()}")
-        gene2pos = pd.read_csv(pos2gene_csv, header=None, index_col=1)[0].to_dict()
-
-    log.info("extract genomic locations for graph nodes")
-    nx_loc_df = snp2cell.util.graph_nodes_to_bed(s2c.grn, gene2pos=gene2pos)
-    assert nx_loc_df is not None
-
-    # filter summ stats
-    log.info("filter summary statistics by node locations")
-    summ_stat_kwargs = {}
-    if summ_stat_header:
-        summ_stat_kwargs = dict(
-            names=summ_stat_header.split(","),
-            header=None,
-        )
-    snp_filt_df = snp2cell.util.filter_summ_stat(
-        summ_stat_path=summ_stat_bed,
-        network_loc=nx_loc_df,
-        summ_stat_kwargs=summ_stat_kwargs,
-    )
-    assert snp_filt_df is not None
-
-    # add LD scores
-    log.info("add LD score locations and save")
-    add_df_kwargs: dict[str, typing.Union[int, list[str], None]] = {}
-    if ld_score_header:
-        add_df_kwargs["names"] = ld_score_header.split(",")
-        add_df_kwargs["header"] = None
-    snp2cell.util.add_col_to_bed(
-        snp_filt_df,
+    filter_summ_stat_file(
+        s2c_obj,
+        summ_stat_bed,
         ld_score_bed,
-        add_df_merge_on=["Chromosome", "Position", "Position"],
-        add_df_kwargs=add_df_kwargs,
-        out_path=out_name,
-        return_df=False,
+        out_name,
+        summ_stat_header,
+        ld_score_header,
+        pos2gene_csv,
     )
 
 
