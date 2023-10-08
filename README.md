@@ -1,4 +1,4 @@
-![example workflow](https://github.com/Teichlab/snp2cell/actions/workflows/main.yml/badge.svg)
+![snp2cell](https://github.com/Teichlab/snp2cell/actions/workflows/python-app.yml/badge.svg)
 
 # snp2cell
 
