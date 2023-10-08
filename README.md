@@ -27,7 +27,7 @@ pip install git+ssh://git@github.com/JPatrickPett/snp2cell.git
 
 ## Usage
 
-snp2cell can be imported as a python module (see [notebooks](https://github.com/Teichlab/snp2cell/edit/main/README.md#Example-notebooks) for examples).
+snp2cell can be imported as a python module (see [notebooks](#example-notebooks) for examples).
 
 Additionally, there is also a command line interface:
 ```commandline
