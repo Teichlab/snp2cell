@@ -10,6 +10,7 @@ Welcome to snp2cell's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   about
    installation
    toy example <toy_example.ipynb>
    pbmc example <pbmc_example.ipynb>
