@@ -51,7 +51,7 @@ mamba activate snp2cell
 **from github**
 
 ```bash
-pip install git+ssh://git@github.com/JPatrickPett/snp2cell.git
+pip install git+ssh://git@github.com/Teichlab/snp2cell.git
 ```
 
 *(installation time: around 2 min)*
