@@ -12,6 +12,28 @@ As an output, a networkx graph of the gene regulatory network with integrated sc
 
 <img src="docs/assets/snp2cell_schematic.png" width="300">
 
+## System requirements
+
+### Hardware requirements
+
+`snp2cell` can run on a standard computer with enough RAM to hold the used datasets in memory.
+It can make use of multiple CPUs to speed up computations.
+
+### Software requirements
+
+**OS requirements**
+
+The package has been tested on:
+
+- macOS Monterey (12.6.7)
+- Linux: Ubuntu 22.04 jammy
+
+**Python requirements**
+
+A python version `>=3.5` and `<3.12` is required for all dependencies to work. 
+Various python libraries are used, listed in `setup.py`, including the python scientific stack, `networkx` and `scanpy`.
+`snp2cell` and all dependencies can be installed via `pip` (see below).
+
 ## Installation
 
 *Optional: create and activate a new conda environment (with python<3.12):*
@@ -20,16 +42,33 @@ mamba create -n snp2cell "python<3.12"
 mamba activate snp2cell
 ```
 
-Install snp2cell:
+### Install with pip
+
+**from PyPI**
+
+*will be added*
+
+**from github**
+
 ```bash
 pip install git+ssh://git@github.com/JPatrickPett/snp2cell.git
 ```
 
+*(installation time: around 2 min)*
+
 ## Usage
+
+**Python module**
 
 snp2cell can be imported as a python module (see [notebooks](#example-notebooks) for examples).
 
-Additionally, there is also a command line interface:
+Demo: A minimal demo can be found [here](https://github.com/Teichlab/snp2cell/blob/main/docs/source/toy_example.ipynb) as a jupyter notebook and as a unit test in `test/test_toy_example.py`. (*running time: around 12 sec*)
+
+**CLI**
+
+Importing `snp2cell` as a python module gives most flexibility.
+Additionally, there is a command line interface. To see all options, run:
+
 ```bash
 snp2cell --help
 ```
