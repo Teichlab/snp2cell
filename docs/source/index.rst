@@ -13,7 +13,6 @@ Welcome to snp2cell's documentation!
    about
    installation
    toy example <toy_example.ipynb>
-   pbmc example <pbmc_example.ipynb>
    api
 
 

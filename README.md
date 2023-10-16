@@ -83,7 +83,6 @@ snp2cell --install-completion bash
 ## Example notebooks
 
 - [toy example](https://github.com/Teichlab/snp2cell/blob/main/docs/source/toy_example.ipynb)
-- [pbmc example](https://github.com/Teichlab/snp2cell/blob/main/docs/source/pbmc_example.ipynb)
 
 ## Citation
 
