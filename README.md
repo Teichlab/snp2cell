@@ -14,6 +14,9 @@ As an output, a networkx graph of the gene regulatory network with integrated sc
 
 ## System requirements
 
+<details>
+<summary><b>show requirements</b></summary>
+
 ### Hardware requirements
 
 `snp2cell` can run on a standard computer with enough RAM to hold the used datasets in memory.
@@ -34,6 +37,8 @@ A python version `>=3.5` and `<3.12` is required for all dependencies to work.
 Various python libraries are used, listed in `setup.py`, including the python scientific stack, `networkx` and `scanpy`.
 `snp2cell` and all dependencies can be installed via `pip` (see below).
 
+</details>
+
 ## Installation
 
 *Optional: create and activate a new conda environment (with python<3.12):*
@@ -41,12 +46,6 @@ Various python libraries are used, listed in `setup.py`, including the python sc
 mamba create -n snp2cell "python<3.12"
 mamba activate snp2cell
 ```
-
-### Install with pip
-
-**from PyPI**
-
-*will be added*
 
 **from github**
 
@@ -86,4 +85,4 @@ snp2cell --install-completion bash
 
 ## Citation
 
-*to be added*
+`iss_patcher` is part of the forthcoming manuscript *"A multiomic atlas of human early skeletal development"* by To, Fei, Pett et al. Stay tuned for details!
