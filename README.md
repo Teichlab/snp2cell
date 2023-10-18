@@ -85,4 +85,4 @@ snp2cell --install-completion bash
 
 ## Citation
 
-`iss_patcher` is part of the forthcoming manuscript *"A multiomic atlas of human early skeletal development"* by To, Fei, Pett et al. Stay tuned for details!
+`snp2cell` is part of the forthcoming manuscript *"A multiomic atlas of human early skeletal development"* by To, Fei, Pett et al. Stay tuned for details!
