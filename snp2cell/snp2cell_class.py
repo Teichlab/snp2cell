@@ -109,10 +109,12 @@ class SNP2CELL:
 
     def _get_perturbed_stats(self, score_key: str, suffix: str) -> pd.DataFrame:
         # TODO: implement more suffixes
-        assert suffix in ["__zscore"]
+        assert suffix in ["__zscore", "__zscore_mad"]
         score = self.scores_rand[score_key]
         if suffix == "__zscore":
             score = score.apply(self._z_score, axis=0)
+        if suffix == "__zscore_mad":
+            score = score.apply(self._robust_z_score, axis=0)
         return score
 
     @staticmethod

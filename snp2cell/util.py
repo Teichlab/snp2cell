@@ -454,10 +454,10 @@ def get_snp_scores(
             if not snp_se:
                 return np.nan
             snp_r = 0.1 / (0.1 + snp_se**2)
-            snp_bf = np.exp(
+            snp_bf = (
                 np.log(1 - snp_r) / 2 + (snp_beta / snp_se) ** 2 * snp_r / 2
-            )
-            return np.log(snp_bf) / snp_ld
+            )  # log BF
+            return np.exp(snp_bf - snp_ld/4)
         except Exception as e:
             raise ValueError(f"could not compute score using {df} \n{e}")
 
