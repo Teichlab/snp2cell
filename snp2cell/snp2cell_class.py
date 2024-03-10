@@ -55,6 +55,7 @@ class SNP2CELL:
             self.scores = pd.DataFrame(index=list(self.grn.nodes))
             self.scores_prop = pd.DataFrame(index=list(self.grn.nodes))
             self.scores_rand = {}
+            self.de_groups = {}
         else:
             raise ValueError("No GRN set, add GRN first.")
 
@@ -859,8 +860,11 @@ class SNP2CELL:
             if kwargs:
                 cols = self.scores.filter(**kwargs).columns  # type: ignore
                 self.scores = self.scores.drop(columns=cols)  # type: ignore
+                for k in self.de_groups:
+                    self.de_groups[k] = [i for i in self.de_groups[k] if i not in cols]
             else:
                 self.scores = pd.DataFrame(index=list(self.grn.nodes))  # type: ignore
+                self.de_groups = {}
 
     def get_components(self, sel_nodes: list[str]) -> tuple[nx.Graph, list[set]]:
         """
