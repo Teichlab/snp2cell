@@ -709,7 +709,7 @@ class SNP2CELL:
             if "method" in kwargs and kwargs["method"] == "logreg":
                 query_str = f"group == '{grp}'"
             else:
-                query_str = f"group == '{grp}' and pvals_adj < 0.05 and logfoldchanges > 0"
+                query_str = f"group == '{grp}' and pvals_adj < 0.05 and scores > 0"
             scr = de_df.query(query_str).set_index("names")["scores"][:topn].to_dict()
 
             scr_key = f"DE_{grp}__score"
