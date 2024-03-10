@@ -296,7 +296,7 @@ def score_de(
     """
     # load anndata
     log.info(f"load anndata from {Path(anndata).resolve()}")
-    ad = sc.read(anndata)
+    ad = sc.read_h5ad(anndata)
     if use_raw:
         log.info("load from `ad.raw` attribute")
         ad = ad.raw.to_adata()
