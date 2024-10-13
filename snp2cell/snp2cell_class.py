@@ -41,10 +41,10 @@ class SNP2CELL:
         return textwrap.dedent(
             f"""
             GRN: {self.grn}
-            original scores: {self.scores.shape if self.scores is not None else 'None'}  # type: ignore
-            propagated scores: {self.scores_prop.shape if self.scores_prop is not None else 'None'}  # type: ignore
+            original scores: {self.scores.shape if self.scores is not None else 'None'}
+            propagated scores: {self.scores_prop.shape if self.scores_prop is not None else 'None'}
             score perturbations for: {list(self.scores_rand) if self.scores_rand else 'None'}
-            anndata: {self.adata.shape if self.adata is not None else 'None'}  # type: ignore
+            anndata: {self.adata.shape if self.adata is not None else 'None'}
             """
         )
 
