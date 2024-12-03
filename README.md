@@ -85,4 +85,5 @@ snp2cell --install-completion bash
 
 ## Citation
 
-`snp2cell` is part of the forthcoming manuscript *"A multiomic atlas of human early skeletal development"* by To, Fei, Pett et al. Stay tuned for details!
+`snp2cell` is part of the paper *"A multi-omic atlas of human embryonic skeletal development"* by To, Fei, Pett et al.; 2024; Nature
+(https://www.nature.com/articles/s41586-024-08189-z)
