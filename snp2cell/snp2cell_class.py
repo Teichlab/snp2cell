@@ -289,6 +289,7 @@ class SNP2CELL:
         score_key: str = "score",
         propagate: bool = True,
         statistics: bool = True,
+        num_rand: int = 1000,
         num_cores: Optional[int] = None,
         log: logging.Logger = logging.getLogger(),
     ) -> None:
@@ -304,7 +305,9 @@ class SNP2CELL:
         propagate :
             whether to propagate the scores
         statistics :
-            whether to calculate statistics
+            whether to calculate statistics (only if propagate is True)
+        num_rand :
+            number of permutations to compute if statistics is True
         num_cores :
             number of cores to use
         log :
@@ -330,9 +333,9 @@ class SNP2CELL:
                     f"overwriting existing score self.scores_prop['{score_key}']"
                 )
             self.scores_prop[score_key] = self.scores_prop.index.map(p_scr_dct)  # type: ignore
-        if statistics:
-            self.rand_sim(score_key=score_key, num_cores=num_cores)
-            self.add_score_statistics(score_keys=score_key)
+            if statistics:
+                self.rand_sim(score_key=score_key, num_cores=num_cores, n=num_rand)
+                self.add_score_statistics(score_keys=score_key)
         self._defrag_pandas()
 
     def propagate_score(self, score_key: str = "score") -> tuple[str, dict[str, float]]:
@@ -742,6 +745,7 @@ class SNP2CELL:
         group_key: str = "celltype",
         score_key: str = "score",
         suffix: str = "",
+        scale: bool = False,
         statistics: bool = True,
     ) -> None:
         """
@@ -755,6 +759,8 @@ class SNP2CELL:
             score key to combine the DE scores with. E.g. may be a score key for a GWAS based score.
         suffix :
             suffix to use for combining scores. E.g. may be "__zscore" to combine zscores instead of directly combining the propagated scores.
+        scale :
+            whether to scale scores between 0 and 1 before combining
         statistics :
             whether to calculate statistics based on random perturbation background.
 
@@ -768,10 +774,10 @@ class SNP2CELL:
         combine = [
             (f"DE_{grp}__score{suffix}", f"{score_key}{suffix}") for grp in groups
         ]
-        self.combine_scores(combine)
+        self.combine_scores(combine, scale=scale)
 
         if statistics:
-            self.combine_scores_rand([(f"DE_{group_key}__score", score_key, suffix)])
+            self.combine_scores_rand([(f"DE_{group_key}__score", score_key, suffix)], scale=scale)
 
             self.add_score_statistics(
                 score_keys={
