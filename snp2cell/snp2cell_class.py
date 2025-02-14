@@ -202,7 +202,7 @@ class SNP2CELL:
         ValueError
             If the suffix is invalid.
         """
-        if suffix not in SUFFIX:
+        if suffix not in [s.value for s in SUFFIX]:
             raise ValueError(
                 f"Invalid suffix. Must be one of {[s.value for s in SUFFIX]}."
             )
