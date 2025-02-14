@@ -27,6 +27,7 @@ NCPU = multiprocessing.cpu_count()
 
 
 class SUFFIX(Enum):
+    NONE = ""
     ZSCORE = "__zscore"
     ZSCORE_MAD = "__zscore_mad"
 
@@ -190,7 +191,7 @@ class SNP2CELL:
         score_key : str
             Key of the score.
         suffix : SUFFIX
-            Suffix indicating the type of statistics.
+            Suffix indicating the type of statistics. Must be one of {_SUFFIX_}.
 
         Returns
         -------
@@ -732,7 +733,7 @@ class SNP2CELL:
         for key1, key2, suffix in combine:
             scr1: pd.DataFrame
             scr2: pd.DataFrame
-            if not suffix:
+            if suffix == SUFFIX.NONE.value:
                 if scale:
                     scr1 = self._scale_score(  # type: ignore
                         score_key=key1, which="perturbed", inplace=False
@@ -876,7 +877,7 @@ class SNP2CELL:
         self,
         group_key: str = "celltype",
         score_key: str = "score",
-        suffix: str = "",
+        suffix: SUFFIX = SUFFIX.NONE,
         scale: bool = False,
         statistics: bool = True,
     ) -> None:
@@ -891,6 +892,7 @@ class SNP2CELL:
             Score key to combine the DE scores with. E.g. may be a score key for a GWAS based score, by default "score".
         suffix : str, optional
             Suffix to use for combining scores. E.g. may be "__zscore" to combine zscores instead of directly combining the propagated scores, by default "".
+            Available options are: {_SUFFIX_}.
         scale : bool, optional
             Whether to scale scores between 0 and 1 before combining, by default False.
         statistics : bool, optional
@@ -1189,3 +1191,7 @@ class SNP2CELL:
         plt_df = plt_df.loc[rows, :]
 
         sns.heatmap(plt_df, cmap="mako", yticklabels=False)
+
+
+SNP2CELL._get_perturbed_stats.__doc__ = SNP2CELL._get_perturbed_stats.__doc__.format(_SUFFIX_=str([e.value for e in SUFFIX]))
+SNP2CELL.adata_combine_de_scores.__doc__ = SNP2CELL.adata_combine_de_scores.__doc__.format(_SUFFIX_=str([e.value for e in SUFFIX]))
