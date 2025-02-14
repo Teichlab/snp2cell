@@ -8,6 +8,7 @@ import random
 import re
 import textwrap
 from pathlib import Path
+from enum import Enum
 from typing import Union, Optional, Any, Iterable
 
 import dill
@@ -22,10 +23,13 @@ import statsmodels.api as sm
 from snp2cell.util import add_logger, loop_parallel, get_rank_df
 
 RAW_COUNT_THR = 50
-
 MAD_SCALE = 0.6745
-
 NCPU = multiprocessing.cpu_count()
+
+
+class SUFFIX(Enum):
+    ZSCORE = "__zscore"
+    ZSCORE_MAD = "__zscore_mad"
 
 
 class SNP2CELL:
@@ -85,7 +89,8 @@ class SNP2CELL:
         which: str = "original",
         inplace: bool = True,
     ) -> Optional[Union[pd.Series, pd.DataFrame]]:
-        assert score_key is not None or score is not None
+        if score_key is None and score is None:
+            raise ValueError("Either `score_key` or `score` must be provided.")
         scores_out: Optional[Union[pd.DataFrame, dict[str, pd.DataFrame]]]
         scores_out = {
             "propagated": self.scores_prop,
@@ -112,13 +117,15 @@ class SNP2CELL:
         else:
             return scr
 
-    def _get_perturbed_stats(self, score_key: str, suffix: str) -> pd.DataFrame:
-        # TODO: implement more suffixes
-        assert suffix in ["__zscore", "__zscore_mad"]
+    def _get_perturbed_stats(self, score_key: str, suffix: SUFFIX) -> pd.DataFrame:
+        if suffix not in SUFFIX:
+            raise ValueError(
+                f"Invalid suffix. Must be one of {[s.value for s in SUFFIX]}."
+            )
         score = self.scores_rand[score_key]
-        if suffix == "__zscore":
+        if suffix == SUFFIX.ZSCORE:
             score = score.apply(self._z_score, axis=0)
-        if suffix == "__zscore_mad":
+        if suffix == SUFFIX.ZSCORE_MAD:
             score = score.apply(self._robust_z_score, axis=0)
         return score
 
@@ -143,11 +150,10 @@ class SNP2CELL:
         )
 
     def _defrag_pandas(self) -> None:
-        assert (
-            self.scores is not None
-            and self.scores_prop is not None
-            and self.scores_rand
-        )
+        if self.scores is None or self.scores_prop is None or not self.scores_rand:
+            raise ValueError(
+                "Scores, propagated scores, and random scores must be initialized."
+            )
         self.scores = self.scores.copy()
         self.scores_prop = self.scores_prop.copy()
         for k in self.scores_rand.keys():
@@ -784,7 +790,9 @@ class SNP2CELL:
         self.combine_scores(combine, scale=scale)
 
         if statistics:
-            self.combine_scores_rand([(f"DE_{group_key}__score", score_key, suffix)], scale=scale)
+            self.combine_scores_rand(
+                [(f"DE_{group_key}__score", score_key, suffix)], scale=scale
+            )
 
             self.add_score_statistics(
                 score_keys={
