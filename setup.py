@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="snp2cell",
-    version="0.2.0",
+    version="0.2.1",
     description="A package for finding enriched regulatory networks from GWAS and single cell data",
     url="https://github.com/Teichlab/snp2cell",
     author="J.P.Pett",
