@@ -21,6 +21,10 @@ import seaborn as sns
 import statsmodels.api as sm
 from snp2cell.util import add_logger, loop_parallel, get_rank_df
 
+RAW_COUNT_THR = 50
+
+MAD_SCALE = 0.6745
+
 NCPU = multiprocessing.cpu_count()
 
 
@@ -121,7 +125,7 @@ class SNP2CELL:
     @staticmethod
     def _robust_z_score(series: pd.Series) -> pd.Series:
         mad = sp.stats.median_abs_deviation(series, scale=1.0)
-        zscore = 0.6745 * (series - series.median()) / mad
+        zscore = MAD_SCALE * (series - series.median()) / mad
         return zscore
 
     @staticmethod
@@ -636,6 +640,7 @@ class SNP2CELL:
         groupby: str = "celltype",
         check: bool = True,
         topn: int = 500,
+        pval: float = 0.05,
         simn: int = 1000,
         statistics: bool = True,
         num_cores: Optional[int] = None,
@@ -657,6 +662,8 @@ class SNP2CELL:
             whether to check the anndata object
         topn :
             use the topn marker genes per cell type (default: 500)
+        pval :
+            p-value threshold for marker genes (default: 0.05)
         simn :
             how many permutation to compute (default: 1000)
         statistics :
@@ -677,7 +684,7 @@ class SNP2CELL:
         """
         self._check_init(check_adata=True)
         if check:
-            if self.adata.X.max() > 50:  # type: ignore
+            if self.adata.X.max() > RAW_COUNT_THR:  # type: ignore
                 raise ValueError(
                     "adata seems to contain raw counts, "
                     "lognormalise or set check=False."
@@ -712,7 +719,7 @@ class SNP2CELL:
             if "method" in kwargs and kwargs["method"] == "logreg":
                 query_str = f"group == '{grp}'"
             else:
-                query_str = f"group == '{grp}' and pvals_adj < 0.05 and scores > 0"
+                query_str = f"group == '{grp}' and pvals_adj < {pval} and scores > 0"
             scr = de_df.query(query_str).set_index("names")["scores"][:topn].to_dict()
 
             scr_key = f"DE_{grp}__score"
