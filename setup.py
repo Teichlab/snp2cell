@@ -4,7 +4,7 @@ setup(
     name="snp2cell",
     version="0.2.0",
     description="A package for finding enriched regulatory networks from GWAS and single cell data",
-    url="https://github.com/JPatrickPett/snp2cell",
+    url="https://github.com/Teichlab/snp2cell",
     author="J.P.Pett",
     author_email="jp30@sanger.ac.uk",
     license="BSD 3-clause",
@@ -29,6 +29,8 @@ setup(
         "typing_extensions",
         "rich",
         "dill",
+    ],
+    tests_require=[
         "pytest",
     ],
     python_requires=">=3.5, <3.12",
