@@ -6,6 +6,8 @@ __pycache__
 build/
 snp2cell.egg-info/
 .idea/
+.vscode/
+.pytest_cache/
 .DS_Store
 data/
 .pybiomart.sqlite
