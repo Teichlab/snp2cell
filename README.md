@@ -49,8 +49,18 @@ mamba activate snp2cell
 
 **from github**
 
+To download via ssh, an ssh key must have be [added to your GitHub profile](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account).
+
 ```bash
 pip install git+ssh://git@github.com/Teichlab/snp2cell.git
+```
+
+Alternatively, clone the repository and install with pip in two steps:
+
+```bash
+git clone <preferred way ...>
+cd snp2cell
+pip install .
 ```
 
 *(installation time: around 2 min)*
