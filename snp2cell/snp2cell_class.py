@@ -34,7 +34,11 @@ class SUFFIX(Enum):
 
 
 class SNP2CELL:
-    def __init__(self, path: Optional[Union[str, os.PathLike]] = None, seed: Optional[int] = RANDOM_SEED) -> None:
+    def __init__(
+        self,
+        path: Optional[Union[str, os.PathLike]] = None,
+        seed: Optional[int] = RANDOM_SEED,
+    ) -> None:
         """
         Initialize the SNP2CELL object.
 
@@ -127,7 +131,7 @@ class SNP2CELL:
             shared_keys = set(groups) & set(v)
             if shared_keys:
                 raise ValueError(f"Groups {shared_keys} already exist in {k}")
-        
+
         self.de_groups[groupby] = groups
 
     def _scale_score(
@@ -212,7 +216,7 @@ class SNP2CELL:
         """
         if suffix not in [s.value for s in SUFFIX]:
             raise ValueError(
-                f"Invalid suffix. Must be one of {[s.value for s in SUFFIX]}."
+                f"Invalid suffix. Must be one of {[s.value for s in SUFFIX]}. Got '{suffix}'."
             )
         score = self.scores_rand[score_key]
         if suffix == SUFFIX.ZSCORE:
@@ -407,14 +411,16 @@ class SNP2CELL:
         """
         raise NotImplementedError("This method is not yet implemented.")
 
-    def add_grn_from_networkx(self, nx_grn: nx.Graph, overwrite: bool = False) -> None:
+    def add_grn_from_networkx(
+        self, nx_grn: Union[nx.Graph, str, Path], overwrite: bool = False
+    ) -> None:
         """
         Add GRN from networkx object to snp2cell object.
 
         Parameters
         ----------
-        nx_grn : nx.Graph
-            Networkx object.
+        nx_grn : Union[nx.Graph, str, Path]
+            Networkx object or path to a pickled networkx object.
         overwrite : bool, optional
             Whether to overwrite existing networkx object, by default False.
 
@@ -423,7 +429,7 @@ class SNP2CELL:
         IndexError
             If existing scores are found and overwrite is False.
         """
-        if self.scores and not overwrite:
+        if self.scores is not None and not overwrite:
             raise IndexError(
                 "existing scores found, set overwrite=True to discard them."
             )
@@ -506,7 +512,12 @@ class SNP2CELL:
                 )
             self.scores_prop[score_key] = self.scores_prop.index.map(p_scr_dct)  # type: ignore
             if statistics:
-                self.rand_sim(score_key=score_key, num_cores=num_cores, n=num_rand, reset_seed=reset_seed)
+                self.rand_sim(
+                    score_key=score_key,
+                    num_cores=num_cores,
+                    n=num_rand,
+                    reset_seed=reset_seed,
+                )
                 self.add_score_statistics(score_keys=score_key)
         self._defrag_pandas()
 
@@ -528,7 +539,7 @@ class SNP2CELL:
         scr_dct = self.scores[score_key].to_dict()  # type: ignore
         p_scr_dct = self._prop_scr(scr_dct)
         return score_key, p_scr_dct
-   
+
     @add_logger()
     def propagate_scores(
         self,
@@ -992,33 +1003,79 @@ class SNP2CELL:
         """
         Delete selected scores from the object.
 
+        By default, this will delete all scores of the selected type.
+        Set `**kwargs` to select specific columns to delete.
+
         Parameters
         ----------
         which : str, optional
-            Type of scores to retrieve. Can be "original" (before propagation), "propagated" (after propagation) or "perturbed" (random permutations), by default "propagated".
+            Type of scores to delete. Can be "original" (before propagation), "propagated" (after propagation), "perturbed" (random permutations) or "all" (all scores), by default "propagated".
         kwargs : Any
-            Options passed to `pd.filter(**kwargs)` for selecting columns to DROP.
+            Options passed to `pd.filter(**kwargs)` for selecting columns to DROP. If not set, all columns will be dropped.
+            Set `items=[]` to drop columns by name, `like=""` to drop columns by partial name, `regex=""` to drop columns by regex.
         """
         self._check_init()
-        if which == "perturbed":
-            self.scores_rand = {}
-        elif which == "all":
+        if which == "all":
             self._init_scores()
+        elif which == "perturbed":
+            if kwargs:
+                # remove columns from random / perturbed scores
+                keys_to_remove = self.scores_rand.keys()
+                if "items" in kwargs:
+                    keys_to_remove = kwargs["items"]
+                elif "like" in kwargs:
+                    keys_to_remove = [
+                        k for k in self.scores_rand if kwargs["like"] in k
+                    ]
+                elif "regex" in kwargs:
+                    keys_to_remove = [
+                        k for k in self.scores_rand if re.search(kwargs["regex"], k)
+                    ]
+                for key in keys_to_remove:
+                    self.scores_rand.pop(key, None)
+            else:
+                self.scores_rand = {}
         elif which == "propagated":
             if kwargs:
+                # remove columns from propagated scores
                 cols = self.scores_prop.filter(**kwargs).columns  # type: ignore
                 self.scores_prop = self.scores_prop.drop(columns=cols)  # type: ignore
+
+                # also remove columns from random / perturbed scores
+                for key in cols:
+                    if key in self.scores_rand:
+                        self.scores_rand.pop(key, None)
             else:
                 self.scores_prop = pd.DataFrame(index=list(self.grn.nodes))  # type: ignore
+                self.scores_rand = {}
         elif which == "original":
             if kwargs:
+                # remove columns from original scores
                 cols = self.scores.filter(**kwargs).columns  # type: ignore
                 self.scores = self.scores.drop(columns=cols)  # type: ignore
                 for k in self.de_groups:
                     self.de_groups[k] = [i for i in self.de_groups[k] if i not in cols]
+
+                # also remove columns from propagated scores
+                self.scores_prop = self.scores_prop.drop(columns=cols, errors="ignore")  # type: ignore
+                stat_cols = [
+                    col
+                    for col in self.scores_prop.columns
+                    if any(col.startswith(f"{c}__") for c in cols)
+                ]
+                self.scores_prop = self.scores_prop.drop(columns=stat_cols, errors="ignore")  # type: ignore
+
+                # also remove columns from random / perturbed scores
+                for key in cols:
+                    if key in self.scores_rand:
+                        self.scores_rand.pop(key, None)
             else:
                 self.scores = pd.DataFrame(index=list(self.grn.nodes))  # type: ignore
                 self.de_groups = {}
+                self.scores_prop = pd.DataFrame(index=list(self.grn.nodes))  # type: ignore
+                self.scores_rand = {}
+        else:
+            raise ValueError(f"unknown score type: {which}")
 
     def get_components(self, sel_nodes: List[str]) -> Tuple[nx.Graph, List[set]]:
         """
@@ -1215,5 +1272,11 @@ class SNP2CELL:
         sns.heatmap(plt_df, cmap="mako", yticklabels=False)
 
 
-SNP2CELL._get_perturbed_stats.__doc__ = SNP2CELL._get_perturbed_stats.__doc__.format(_SUFFIX_=str([e.value for e in SUFFIX]))
-SNP2CELL.adata_combine_de_scores.__doc__ = SNP2CELL.adata_combine_de_scores.__doc__.format(_SUFFIX_=str([e.value for e in SUFFIX]))
+SNP2CELL._get_perturbed_stats.__doc__ = SNP2CELL._get_perturbed_stats.__doc__.format(
+    _SUFFIX_=str([e.value for e in SUFFIX])
+)
+SNP2CELL.adata_combine_de_scores.__doc__ = (
+    SNP2CELL.adata_combine_de_scores.__doc__.format(
+        _SUFFIX_=str([e.value for e in SUFFIX])
+    )
+)

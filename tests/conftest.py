@@ -3,7 +3,11 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import scanpy as sc
+from snp2cell.snp2cell_class import SNP2CELL
 
+@pytest.fixture
+def snp2cell_instance():
+    return SNP2CELL(seed=42)
 
 @pytest.fixture(scope="session")
 def fake_grn():

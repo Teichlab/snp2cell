@@ -1,4 +1,4 @@
-from snp2cell.snp2cell_class import SNP2CELL, NCPU
+from snp2cell.snp2cell_class import SNP2CELL, SUFFIX, NCPU
 from snp2cell import util
 from snp2cell import cli
 from snp2cell import recipes
