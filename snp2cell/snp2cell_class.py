@@ -1269,8 +1269,11 @@ class SNP2CELL:
 
     def plot_group_heatmap(
         self,
-        std_cutoff: float = 1,
+        score_key: str = "score",
+        plt_df: Optional[pd.DataFrame] = None,
+        topn: int = 5,
         row_pattern: str = ".*DE_(?P<rowname>.+?)__",
+        figsize: Tuple[int, int] = (7, 7),
         **kwargs: Any,
     ) -> None:
         """
@@ -1289,22 +1292,50 @@ class SNP2CELL:
         -------
         None
         """
-        plt_df: pd.DataFrame
-        plt_df = self.get_scores(**kwargs)
-        plt_df = plt_df.loc[plt_df.std(axis=1) > std_cutoff, :]
-        plt_df = plt_df.apply(self._std_scale, axis=1)
+        if plt_df is None:
+            if score_key:
+                kwargs["regex"] = f"^min.*{score_key}.*zscore$"
+                if "query" not in kwargs:
+                    kwargs["query"] = f"{score_key}__pval < 0.05"
+            plt_df = self.get_scores(**kwargs)
 
-        plt_df = plt_df.rename(columns=self.rename_column)
+        if row_pattern:
+            plt_df = plt_df.rename(
+                columns=lambda c: self.rename_column(c, row_pattern=row_pattern)
+            )
 
-        plt_df = plt_df.loc[
-            :, plt_df.median(axis=0).sort_values(ascending=False).index.tolist()
-        ]
         rows = []
         for c in plt_df:
-            rows.extend(plt_df[plt_df[c] == 1].index.tolist())
-        plt_df = plt_df.loc[rows, :]
+            rows.extend(plt_df.sort_values(c, ascending=False)[:topn].index.tolist())
+        plt_df = plt_df.loc[pd.unique(rows), :]
 
-        sns.heatmap(plt_df, cmap="mako", yticklabels=False)
+        # optimal leaf ordering for cols
+        from scipy.spatial import distance
+        from scipy.cluster import hierarchy
+
+        dst_col = distance.pdist(plt_df.T, metric="cityblock")
+        col_linkage = hierarchy.optimal_leaf_ordering(
+            hierarchy.linkage(dst_col, method="complete"), dst_col
+        )
+        dst_row = distance.pdist(plt_df, metric="cityblock")
+        row_linkage = hierarchy.optimal_leaf_ordering(
+            hierarchy.linkage(dst_row, method="complete"), dst_row
+        )
+
+        sns.clustermap(
+            plt_df,
+            cmap="mako",
+            yticklabels=True,
+            figsize=figsize,
+            dendrogram_ratio=(0.1, 0.1),
+            row_linkage=row_linkage,
+            col_linkage=col_linkage,
+            col_cluster=True,
+            row_cluster=True,
+            z_score=None,
+        )
+
+        plt.show()
 
 
 SNP2CELL._get_perturbed_stats.__doc__ = SNP2CELL._get_perturbed_stats.__doc__.format(
