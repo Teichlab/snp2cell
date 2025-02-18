@@ -8,7 +8,7 @@ import random
 import re
 from pathlib import Path
 from enum import Enum
-from typing import Union, Optional, Any, Iterable, Dict, List, Tuple
+from typing import Literal, Union, Optional, Any, Iterable, Dict, List, Tuple
 
 import dill
 import matplotlib.pyplot as plt  # type: ignore
@@ -1191,46 +1191,81 @@ class SNP2CELL:
 
     def plot_group_summary(
         self,
-        std_cutoff: float = 1,
+        score_key: str = "score",
+        plt_df: Optional[pd.DataFrame] = None,
+        topn: Optional[int] = None,
+        errorbar: Literal["pi", "std", "ci", "se"] = "ci",
         row_pattern: str = ".*DE_(?P<rowname>.+?)__",
+        figsize: Tuple[int, int] = (7, 5),
+        rotation: int = 60,
         **kwargs: Any,
     ) -> None:
         """
-        Plot scores aggregated across all nodes.
+        Plot scores aggregated across nodes.
+
+        There are three ways to select scores for plotting:
+        1. Set `plt_df` to a data frame with scores. This will plot all scores in the data frame.
+        2. Set `score_key` to a key of a score to plot. This will plot all combinations of this score with other scores.
+        3. Set `**kwargs` to options passed to `get_scores(**kwargs)` for retrieving scores to plot.
 
         Parameters
         ----------
-        std_cutoff : float, optional
-            Cutoff on standard deviation for selecting nodes with larger variation across scores, by default 1.
+        score_key : str, optional
+            Key of the score to plot, by default "score". This will plot all combinations of this score with other scores.
+            Only used if `plt_df` is not set.
+        plt_df : Optional[pd.DataFrame], optional
+            Data frame with scores to plot (as retrieved by `snp2cell.get_scores()`), by default None. If not set, scores in the object will be plotted.
+        topn : Optional[int], optional
+            Number of top scores to plot, by default None.
+        errorbar : Literal["pi", "std", "ci", "se"], optional
+            Type of error bar to plot, by default "ci".
+            Options are: "pi" (percentile interval), "std" (standard deviation), "ci" (confidence interval, 95%), "se" (standard error).
         row_pattern : str, optional
             Regex for extracting names for plotting from the score names, by default ".*DE_(?P<rowname>.+?)__".
+        figsize : Tuple[int, int], optional
+            Figure size, by default (7, 5).
+        rotation : int, optional
+            Rotation of x-axis labels, by default 60.
         kwargs : Any
-            Options passed to `get_scores(**kwargs)`.
+            Options passed to `get_scores(**kwargs)` for retrieving scores to plot.
+            Only used if `plt_df` is not set.
 
         Returns
         -------
         None
         """
-        plt_df: pd.DataFrame
-        plt_df = self.get_scores(**kwargs)
-        plt_df = plt_df.loc[plt_df.std(axis=1) > std_cutoff, :]
-        # plt_df = plt_df.loc[~plt_df.apply(lambda x: all(x[0]==x), axis=1),:]
-        plt_df = plt_df.apply(self._robust_z_score, axis=1)
+        if plt_df is None:
+            if score_key:
+                kwargs["regex"] = f"^min.*{score_key}.*zscore$"
+                if "query" not in kwargs:
+                    kwargs["query"] = f"{score_key}__pval < 0.05"
+            plt_df = self.get_scores(**kwargs)
 
-        plt_df = plt_df.rename(columns=self.rename_column)
+        if row_pattern:
+            plt_df = plt_df.rename(
+                columns=lambda c: self.rename_column(c, row_pattern=row_pattern)
+            )
 
+        order = plt_df.mean(axis=0).sort_values(ascending=False).index.tolist()
+        if topn:
+            order = order[:topn]
+
+        fig, ax = plt.subplots(figsize=figsize)
         sns.set_theme(style="ticks")
         sns.set_style("whitegrid")
-        sns.boxplot(
+        sns.pointplot(
             data=plt_df,
-            order=plt_df.median(axis=0).sort_values(ascending=False).index.tolist(),
-            showfliers=False,
-            notch=True,
-            boxprops={"facecolor": "#3C5488FF", "edgecolor": "none"},
-            medianprops={"color": "lightblue"},
-            width=0.7,
+            order=order,
+            estimator="mean",
+            color="#3C5488FF",
+            linestyles="",
+            marker="o",
+            errorbar=errorbar,
+            ax=ax,
         )
-        plt.xticks(rotation=60, horizontalalignment="right")
+        plt.xticks(rotation=rotation, horizontalalignment="right")
+
+        return fig, ax
 
     def plot_group_heatmap(
         self,
