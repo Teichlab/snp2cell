@@ -23,6 +23,7 @@ from snp2cell.util import add_logger, loop_parallel, get_rank_df
 
 RAW_COUNT_THR = 50
 MAD_SCALE = 0.6745
+RANDOM_SEED = 42
 NCPU = multiprocessing.cpu_count()
 
 
@@ -33,12 +34,13 @@ class SUFFIX(Enum):
 
 
 class SNP2CELL:
-    def __init__(self, path: Optional[Union[str, os.PathLike]] = None) -> None:
+    def __init__(self, path: Optional[Union[str, os.PathLike]] = None, seed: Optional[int] = RANDOM_SEED) -> None:
         """
         Initialize the SNP2CELL object.
 
         Parameters:
         path (Optional[Union[str, os.PathLike]]): Path to load data from.
+        seed (Optional[int]): Seed for random number generation.
         """
         self.grn: Optional[nx.Graph] = None
         self.adata: Optional[sc.AnnData] = None
@@ -46,6 +48,11 @@ class SNP2CELL:
         self.scores_prop: Optional[pd.DataFrame] = None
         self.scores_rand: Dict[str, pd.DataFrame] = {}
         self.de_groups: Dict[str, List[str]] = {}
+        self.seed = seed
+
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
 
         if path:
             self.load_data(path)
@@ -356,6 +363,7 @@ class SNP2CELL:
             "scores_rand": self.scores_rand,
             "adata": self.adata,
             "de_groups": self.de_groups,
+            "seed": self.seed,
         }
         with open(path, "wb") as f:
             dill.dump(data, f)
@@ -386,6 +394,7 @@ class SNP2CELL:
         self.scores_rand = data["scores_rand"]
         self.adata = data["adata"]
         self.de_groups = data["de_groups"]
+        self.seed = data["seed"] if "seed" in data else None
 
     def add_grn_from_pandas(self, adjacency_df: pd.DataFrame) -> None:
         """
@@ -457,6 +466,7 @@ class SNP2CELL:
         num_rand: int = 1000,
         num_cores: Optional[int] = None,
         log: logging.Logger = logging.getLogger(),
+        reset_seed: Union[bool, int] = True,
     ) -> None:
         """
         Add a score to the object. Optionally propagate the score and calculate permutation statistics.
@@ -477,6 +487,8 @@ class SNP2CELL:
             Number of cores to use, by default None.
         log : logging.Logger, optional
             Logger, by default logging.getLogger().
+        reset_seed : Union[bool, int], optional
+            Whether to reset the seed for random number generation, by default True.
         """
         self._check_init()
         log.info(f"adding score: {score_key}")
@@ -494,7 +506,7 @@ class SNP2CELL:
                 )
             self.scores_prop[score_key] = self.scores_prop.index.map(p_scr_dct)  # type: ignore
             if statistics:
-                self.rand_sim(score_key=score_key, num_cores=num_cores, n=num_rand)
+                self.rand_sim(score_key=score_key, num_cores=num_cores, n=num_rand, reset_seed=reset_seed)
                 self.add_score_statistics(score_keys=score_key)
         self._defrag_pandas()
 
@@ -516,7 +528,7 @@ class SNP2CELL:
         scr_dct = self.scores[score_key].to_dict()  # type: ignore
         p_scr_dct = self._prop_scr(scr_dct)
         return score_key, p_scr_dct
-
+   
     @add_logger()
     def propagate_scores(
         self,
@@ -561,6 +573,7 @@ class SNP2CELL:
         n: int = 1000,
         num_cores: Optional[int] = None,
         log: logging.Logger = logging.getLogger(),
+        reset_seed: Union[bool, int] = True,
     ) -> None:
         """
         Create random permutations and propagate them.
@@ -577,7 +590,16 @@ class SNP2CELL:
             Number of cores to use, by default None.
         log : logging.Logger, optional
             Logger, by default logging.getLogger().
+        reset_seed : Union[bool, int], optional
+            Whether to reset the seed for random number generation, by default True.
         """
+        if isinstance(reset_seed, int):
+            random.seed(reset_seed)
+            np.random.seed(reset_seed)
+        elif reset_seed and self.seed is not None:
+            random.seed(self.seed)
+            np.random.seed(self.seed)
+
         self._check_init()
         log.info(f"create {n} permutations of score {score_key}")
         if isinstance(score_key, str):
