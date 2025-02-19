@@ -24,6 +24,7 @@ from snp2cell.util import add_logger, loop_parallel, get_rank_df
 RAW_COUNT_THR = 50
 MAD_SCALE = 0.6745
 RANDOM_SEED = 42
+PROPAGATE_UNDIRECTED = True
 NCPU = multiprocessing.cpu_count()
 
 
@@ -106,7 +107,7 @@ class SNP2CELL:
         nx_grn : nx.Graph
             The networkx graph representing the GRN.
         """
-        self.grn = nx_grn.to_undirected()
+        self.grn = nx_grn
 
     def _add_de_groups(self, groupby: str, groups: List[str]) -> None:
         """
@@ -293,7 +294,7 @@ class SNP2CELL:
             Dictionary of propagated scores.
         """
         return nx.pagerank(
-            self.grn,
+            self.grn.to_undirected() if PROPAGATE_UNDIRECTED else self.grn,
             personalization=scr_dct,
         )
 
