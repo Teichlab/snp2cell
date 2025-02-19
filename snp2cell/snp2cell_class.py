@@ -1,3 +1,4 @@
+from collections import namedtuple
 import copy
 import gc
 import logging
@@ -11,6 +12,7 @@ from enum import Enum
 from typing import Literal, Union, Optional, Any, Iterable, Dict, List, Tuple
 
 import dill
+import matplotlib as mpl
 import matplotlib.pyplot as plt  # type: ignore
 import networkx as nx
 import numpy as np
@@ -1275,6 +1277,7 @@ class SNP2CELL:
         topn: int = 5,
         row_pattern: str = ".*DE_(?P<rowname>.+?)__",
         figsize: Tuple[int, int] = (7, 7),
+        dendrogram_ratio: Tuple[float, float] = (0.1, 0.1),
         **kwargs: Any,
     ) -> None:
         """
@@ -1286,6 +1289,8 @@ class SNP2CELL:
             Cutoff on standard deviation for selecting nodes with larger variation across scores, by default 1.
         row_pattern : str, optional
             Regex for extracting names for plotting from the score names, by default ".*DE_(?P<rowname>.+?)__".
+        dendrogram_ratio : Tuple[float, float], optional
+            Ratio of the dendrogram size to the heatmap size, by default (0.1, 0.1).
         kwargs : Any
             Options passed to `get_scores(**kwargs)`.
 
@@ -1328,13 +1333,142 @@ class SNP2CELL:
             cmap="mako",
             yticklabels=True,
             figsize=figsize,
-            dendrogram_ratio=(0.1, 0.1),
+            dendrogram_ratio=dendrogram_ratio,
             row_linkage=row_linkage,
             col_linkage=col_linkage,
             col_cluster=True,
             row_cluster=True,
             z_score=None,
         )
+
+        plt.show()
+
+    def plot_network(
+        self,
+        score: str,
+        gene: str,
+        direction: Literal["upstream", "downstream"] = "upstream",
+        n_neighbors: Tuple = (5, 10),
+        hops: int = 2,
+        vmin_gene: Optional[float] = None,
+        vmax_gene: Optional[float] = None,
+        vmin_region: Optional[float] = None,
+        vmax_region: Optional[float] = None,
+    ):
+        # TODO: this is specific for eGRNs
+        G = self.grn
+        if not isinstance(G, nx.DiGraph):
+            raise ValueError(
+                "plot_network only works for directed graphs at the moment"
+            )
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+        TFs = {n for n, c in G.out_degree() if c > 0 and n[:3] != "chr"}
+
+        for n in G.nodes:
+            if n in TFs:
+                G.nodes[n]["transcription_factor"] = True
+            if n[:3] == "chr":
+                G.nodes[n]["region"] = True
+
+        get_val = lambda n: self.get_scores().loc[n, score]
+
+        # select nodes to plot
+        nodes_sel = [[gene]]
+        for i in range(hops):
+            if direction == "upstream":
+                nodes_sel.append(
+                    sorted(
+                        list(set(p for n in nodes_sel[-1] for p in G.predecessors(n))),
+                        key=get_val,
+                    )[-n_neighbors[i] :]
+                )
+            elif direction == "downstream":
+                nodes_sel.append(
+                    sorted(
+                        list(set(p for n in nodes_sel[-1] for p in G.successors(n))),
+                        key=get_val,
+                    )[-n_neighbors[i] :]
+                )
+        nodes_sel = sum(nodes_sel, start=[])
+
+        nx_graph = G.subgraph(nodes_sel)
+
+        # plot network
+        vals_gn = [
+            get_val(node)
+            for node in nx_graph.nodes
+            if "transcription_factor" in nx_graph.nodes[node]
+        ]
+        vals_rg = [
+            get_val(node) for node in nx_graph.nodes if "region" in nx_graph.nodes[node]
+        ]
+
+        vmin_gene = vmin_gene if vmin_gene is not None else min(vals_gn)
+        vmax_gene = vmax_gene if vmax_gene is not None else max(vals_gn)
+        vmin_region = vmin_region if vmin_region is not None else min(vals_rg)
+        vmax_region = vmax_region if vmax_region is not None else max(vals_rg)
+
+        node_vis = namedtuple("node_vis", "color size label")
+        cmap = plt.cm.Blues
+        cmap2 = plt.cm.Reds
+
+        def get_attr(node):
+            if (
+                "region" in nx_graph.nodes[node]
+                and isinstance(nx_graph.nodes[node]["region"], bool)
+                and nx_graph.nodes[node]["region"]
+            ):
+                return node_vis(
+                    cmap2(
+                        (get_val(node) - vmin_region) / (vmax_region - vmin_region),
+                        alpha=0.5,
+                    ),
+                    50,
+                    "",
+                )
+            else:
+                return node_vis(
+                    cmap(
+                        (get_val(node) - vmin_gene) / (vmax_gene - vmin_gene), alpha=0.5
+                    ),
+                    300,
+                    node,
+                )
+
+        draw_kwargs = {
+            "node_color": [get_attr(node).color for node in nx_graph.nodes],
+            "node_size": [get_attr(node).size for node in nx_graph.nodes],
+            "labels": {node: get_attr(node).label for node in nx_graph.nodes},
+            "with_labels": True,
+        }
+
+        pos = nx.kamada_kawai_layout(nx_graph.to_undirected())
+        ax = nx.draw(nx_graph, pos=pos, **draw_kwargs)
+
+        divider = make_axes_locatable(plt.gca())
+
+        ax_cb = divider.new_horizontal(size="5%", pad=0.05)
+        cb1 = mpl.colorbar.ColorbarBase(
+            ax_cb,
+            label="gene",
+            cmap=cmap,
+            orientation="vertical",
+            norm=plt.Normalize(vmin=vmin_gene, vmax=vmax_gene),
+            alpha=0.5,
+        )
+        plt.gcf().add_axes(ax_cb)
+
+        ax_cb = divider.new_horizontal(size="5%", pad=0.8)
+        cb1 = mpl.colorbar.ColorbarBase(
+            ax_cb,
+            label="region",
+            cmap=cmap2,
+            orientation="vertical",
+            norm=plt.Normalize(vmin=vmin_region, vmax=vmax_region),
+            alpha=0.5,
+        )
+        plt.gcf().add_axes(ax_cb)
 
         plt.show()
 
