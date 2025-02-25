@@ -78,7 +78,7 @@ class SNP2CELL:
             f"original scores: {self.scores.shape if self.scores is not None else 'None'}\n"
             f"propagated scores: {self.scores_prop.shape if self.scores_prop is not None else 'None'}\n"
             f"score perturbations for: {list(self.scores_rand) if self.scores_rand else 'None'}\n"
-            f"anndata: {self.adata.shape if self.adata is not None else 'None'}"
+            f"adata: {self.adata.shape if self.adata is not None else 'None'}"
         )
 
     ###--------------------------------------------------- private
