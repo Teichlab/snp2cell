@@ -6,6 +6,7 @@ import typing
 from functools import wraps
 from inspect import signature
 from pathlib import Path
+import multiprocessing as mp
 
 import dill
 import networkx as nx
@@ -201,6 +202,159 @@ def get_gene2pos_mapping(
     else:
         pos2gene = {v: k for k, v in gene2pos.items()}
         return pos2gene
+
+
+@add_logger()
+def export_for_fgwas(
+    s2c: snp2cell.SNP2CELL,
+    region_loc_path: str = "peak_locations.txt",
+    log: logging.Logger = logging.getLogger(),
+) -> None:
+    """
+    Export genomic regions for fgwas analysis. This can be regions in an eGRN or transcription start sites of genes.
+    Transcription start sites can for example be obtained with `get_gene2pos_mapping()`.
+
+    Assumes that nodes in the network are named like "chr1:201-701". The regions are represented by their center.
+
+    This can be used as input files for the nf-fgwas pipeline to calculate Bayes Factors from GWAS summary statistics:
+    https://github.com/cellgeni/nf-fgwas
+
+    For this only the first part of the pipeline can be run with, e.g.:
+    ```
+    nextflow run /path/to/nf-fgwas/main.nf -resume -qs 1000 \
+      --enrichment false \
+      --window_size 5000 \
+      --tss_file "/path/to/peak_locations.txt.gz" \
+      --cell_types "/path/to/peak_locations.txt" \
+      --studies "/path/to/studies.csv"
+    ```
+
+    Parameters
+    ----------
+    s2c : snp2cell.SNP2CELL
+        SNP2CELL object containing the gene regulatory network (GRN)
+    region_loc_path : str
+        Path to save the region locations (default: "peak_locations.txt")
+
+    Returns
+    -------
+    None
+    """
+    grn_df = nx.to_pandas_edgelist(s2c.grn)
+    nodes = {
+        n
+        for n in grn_df["source"].tolist() + grn_df["target"].tolist()
+        if n.startswith("chr")
+    }
+
+    pos_df = pd.DataFrame(
+        {
+            "hm_chr": [n.split(":")[0][3:] for n in nodes],
+            "hm_pos": [
+                (int(start) + int(end)) // 2 if start != end else int(end)
+                for n in nodes
+                for start, end in [n.split(":")[1].split("-")]
+            ],
+        }
+    )
+
+    pos_df["hm_chr"] = pd.to_numeric(pos_df["hm_chr"], errors="coerce")
+    pos_df = pos_df.dropna().astype({"hm_chr": int}).sort_values(["hm_chr", "hm_pos"])
+
+    pos_df.to_csv(f"{region_loc_path}.gz", sep="\t", header=False, index=False)
+    pos_df.to_csv(region_loc_path, sep="\t", header=True, index=False)
+
+
+@add_logger()
+def load_fgwas_scores(
+    fgwas_output_path: os.PathLike,
+    region_loc_path: os.PathLike,
+    rbf_table_path: os.PathLike,
+    lexpand: int = 250,
+    rexpand: int = 250,
+    num_cores: typing.Optional[int] = None,
+    log: logging.Logger = logging.getLogger(),
+) -> typing.Tuple[typing.Dict[str, float], pd.DataFrame]:
+    """
+    Load Bayes Factors from nf-fgwas results and calculate regional Bayes factors (RBF).
+
+    After running the nf-fgwas pipeline (https://github.com/cellgeni/nf-fgwas), the output file should be in a folder like `results/LDSC_results/<studyid>/input.gz`.
+    The region location file (nf-fgwas input) can be generated with `export_for_fgwas()`.
+
+    The columns in the output file correspond to: region ID, SNP log BF, SNP log weight including distance and LD score.
+
+    Returns a dictionary with RBF scores and a pandas data frame with region information (name, ID, chromosome, position, RBF).
+    For the dictionary, the region locations are expanded to the full length of the region.
+    This is assuming that each region was represented by its center for the fgwas analysis and that all regions have the same length (default 500bp).
+    If this is not the case, you can use the returned data frame and expand the regions manually.
+
+    Parameters
+    ----------
+    fgwas_output_path : os.PathLike
+        Path to fgwas output file with Bayes Factors.
+    region_loc_path : os.PathLike
+        Path to region location file (result from `export_for_fgwas()`).
+    lexpand : int
+        Number of base pairs to expand the region to the left (default: 250).
+    rexpand : int
+        Number of base pairs to expand the region to the right (default: 250).
+    num_cores : int
+        Number of cores to use (default: 8).
+    log : logging.Logger
+        Logger object (default: logging.getLogger()).
+
+    Returns
+    -------
+    typing.Tuple[typing.Dict[str, float], pd.DataFrame]
+        Dictionary with RBF scores and a pandas data frame with region
+        information (name, ID, chromosome, position, RBF).
+    """
+    if num_cores is None:
+        num_cores = snp2cell.NCPU
+    log.info(f"using {num_cores} cores")
+
+    # load fgwas output
+    df = pd.read_csv(fgwas_output_path, sep="\t", header=None)
+    df.columns = ["regionID", "SNP_BF", "SNP_rel_loc"]
+
+    # calculate regional Bayes factors
+    def calc_per_region_bf(region_id, region_df):
+        w = np.exp(region_df["SNP_rel_loc"])
+        bf = np.exp(region_df["SNP_BF"])
+        rbf = (bf * w).sum() / w.sum()
+        return pd.Series(rbf, index=[region_id])
+
+    with mp.Pool(num_cores) as pool:
+        res = pool.starmap(calc_per_region_bf, df.groupby("regionID"))
+    res = pd.concat(res)
+
+    # add region information from region_loc_path
+    region_info = pd.read_csv(region_loc_path, sep="\t")
+    region_info["RBF"] = region_info.index.map(res)
+    region_info["name"] = region_info.apply(
+        lambda r: f"chr{int(r['hm_chr'])}:{int(r['hm_pos'])}-{int(r['hm_pos'])}", axis=1
+    )
+    region_info["ID"] = region_info.index
+
+    region_info = region_info[["name", "ID", "hm_chr", "hm_pos", "RBF"]].to_csv(
+        rbf_table_path, sep="\t", index=False
+    )
+
+    # calculate log RBF scores
+    scores = (
+        region_info.set_index("name")["RBF"].apply(np.log).sort_values(ascending=False)
+    )
+
+    def rename(s):
+        # expand region to full length
+        chr, pos = s.split(":")[0], int(s.split("-")[1])
+        start, end = pos - lexpand, pos + rexpand
+        return f"{chr}:{start}-{end}"
+
+    scores.index = scores.index.map(rename)
+    score_dct = scores.dropna().to_dict()
+
+    return score_dct, region_info
 
 
 def graph_nodes_to_bed(
