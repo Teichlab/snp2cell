@@ -1313,7 +1313,7 @@ class SNP2CELL:
         rows = []
         for c in plt_df:
             rows.extend(plt_df.sort_values(c, ascending=False)[:topn].index.tolist())
-        plt_df = plt_df.loc[pd.unique(rows), :]
+        plt_df = plt_df.loc[list(set(rows)), :]
 
         # optimal leaf ordering for cols
         from scipy.spatial import distance

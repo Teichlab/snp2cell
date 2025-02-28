@@ -1,13 +1,34 @@
+from contextlib import contextmanager
+from io import BytesIO
 import pytest
 import numpy as np
 import pandas as pd
 import networkx as nx
 import scanpy as sc
-from snp2cell.snp2cell_class import SNP2CELL
+from matplotlib import pyplot as plt
+import snp2cell
+
+
+@contextmanager
+def plot_nonempty(format="png"):
+    buf = BytesIO()
+    plt.figure()
+    plt.savefig(buf, format=format)
+    buf.seek(0)
+    empty_plot_size = buf.getbuffer().nbytes
+    buf.close()
+
+    buf = BytesIO()
+    yield buf
+    buf.seek(0)
+    assert buf.getbuffer().nbytes > empty_plot_size, "Plot should not be empty"
+    buf.close()
+
 
 @pytest.fixture
 def snp2cell_instance():
-    return SNP2CELL(seed=42)
+    return snp2cell.SNP2CELL(seed=42)
+
 
 @pytest.fixture(scope="session")
 def fake_grn():

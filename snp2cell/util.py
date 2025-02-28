@@ -19,6 +19,7 @@ from tqdm import tqdm
 
 import snp2cell
 
+
 F = typing.TypeVar("F", bound=typing.Callable[..., typing.Any])
 
 
@@ -206,7 +207,7 @@ def get_gene2pos_mapping(
 
 @add_logger()
 def export_for_fgwas(
-    s2c: snp2cell.SNP2CELL,
+    s2c: "snp2cell.SNP2CELL",
     region_loc_path: str = "peak_locations.txt",
     log: logging.Logger = logging.getLogger(),
 ) -> None:

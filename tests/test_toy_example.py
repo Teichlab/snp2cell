@@ -1,9 +1,13 @@
 import snp2cell
+import matplotlib.pyplot as plt
+
+import snp2cell
+from conftest import plot_nonempty
 
 snp2cell.util.set_num_cpu(1)
 
 
-def test_toy_example(fake_grn, fake_adata, fake_snp_score):
+def test_toy_example(fake_grn, fake_adata, fake_snp_score, tmp_path):
     s2c = snp2cell.SNP2CELL()
     s2c.add_grn_from_networkx(fake_grn)
 
@@ -65,3 +69,20 @@ def test_toy_example(fake_grn, fake_adata, fake_snp_score):
     sum_c = s2c.scores_prop["min(DE_C__score__zscore,snp_score__zscore)"].sum()
 
     assert sum_c > sum_b > sum_a, "computed values are not correct"
+
+    # test plotting
+    plt.switch_backend("Agg")  # non-interactive backend (don't display plots)
+
+    with plot_nonempty() as buf:
+        s2c.plot_group_summary(score_key="snp_score")
+        plt.savefig(buf, format="png")
+
+    with plot_nonempty() as buf:
+        s2c.plot_group_heatmap(score_key="snp_score", query="")
+        plt.savefig(buf, format="png")
+
+    # network plot only works with directed graphs at the moment
+    # s2c.plot_network(score="snp_score", gene="1")
+
+    # Close all plots to avoid memory issues
+    plt.close("all")
