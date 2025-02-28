@@ -13,6 +13,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pyranges
+import pybiomart
 import scanpy
 from joblib import Parallel, delayed
 from tqdm import tqdm
@@ -163,8 +164,6 @@ def get_gene2pos_mapping(
     type
         a dictionary {<gene symbol>: <genomic location>}
     """
-    import pybiomart
-
     host = host or "http://www.ensembl.org"
     chrs = chrs or [str(i + 1) for i in range(22)]
 
@@ -184,19 +183,18 @@ def get_gene2pos_mapping(
         ]
     )
 
-    gene_df = gene_df.drop_duplicates("Gene name").query(
-        "`Chromosome/scaffold name`.isin(@chrs)", engine="python"
-    )
+    gene_df = gene_df.drop_duplicates("external_gene_name")
+    gene_df = gene_df[gene_df["chromosome_name"].isin(chrs)]
     gene_df["position"] = (
         "chr"
-        + gene_df["Chromosome/scaffold name"].astype(str)
+        + gene_df["chromosome_name"].astype(str)
         + ":"
-        + gene_df["Gene start (bp)"].astype(str)
+        + gene_df["start_position"].astype(str)
         + "-"
-        + gene_df["Gene end (bp)"].astype(str)
+        + gene_df["end_position"].astype(str)
     )
 
-    gene2pos = gene_df.set_index("Gene name")["position"].to_dict()
+    gene2pos = gene_df.set_index("external_gene_name")["position"].to_dict()
 
     if not rev:
         return gene2pos
@@ -266,6 +264,16 @@ def export_for_fgwas(
     pos_df.to_csv(region_loc_path, sep="\t", header=True, index=False)
 
 
+def _calc_per_region_bf(region_id: str, region_df: pd.DataFrame) -> pd.Series:
+    """
+    calculate regional Bayes factors per group (used in `load_fgwas_scores`)
+    """
+    w = np.exp(region_df["SNP_rel_loc"])
+    bf = np.exp(region_df["SNP_BF"])
+    rbf = (bf * w).sum() / w.sum()
+    return pd.Series(rbf, index=[region_id])
+
+
 @add_logger()
 def load_fgwas_scores(
     fgwas_output_path: os.PathLike,
@@ -318,15 +326,8 @@ def load_fgwas_scores(
     df = pd.read_csv(fgwas_output_path, sep="\t", header=None)
     df.columns = ["regionID", "SNP_BF", "SNP_rel_loc"]
 
-    # calculate regional Bayes factors
-    def calc_per_region_bf(region_id, region_df):
-        w = np.exp(region_df["SNP_rel_loc"])
-        bf = np.exp(region_df["SNP_BF"])
-        rbf = (bf * w).sum() / w.sum()
-        return pd.Series(rbf, index=[region_id])
-
     with mp.Pool(num_cores) as pool:
-        res = pool.starmap(calc_per_region_bf, df.groupby("regionID"))
+        res = pool.starmap(_calc_per_region_bf, df.groupby("regionID"))
     res = pd.concat(res)
 
     # add region information from region_loc_path
@@ -337,7 +338,7 @@ def load_fgwas_scores(
     )
     region_info["ID"] = region_info.index
 
-    region_info = region_info[["name", "ID", "hm_chr", "hm_pos", "RBF"]].to_csv(
+    region_info[["name", "ID", "hm_chr", "hm_pos", "RBF"]].to_csv(
         rbf_table_path, sep="\t", index=False
     )
 

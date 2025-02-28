@@ -10,7 +10,7 @@ import snp2cell
 
 
 @contextmanager
-def plot_nonempty(format="png"):
+def check_plot_nonempty(format="png"):
     buf = BytesIO()
     plt.figure()
     plt.savefig(buf, format=format)

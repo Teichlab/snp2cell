@@ -2,7 +2,7 @@ import snp2cell
 import matplotlib.pyplot as plt
 
 import snp2cell
-from conftest import plot_nonempty
+from conftest import check_plot_nonempty
 
 snp2cell.util.set_num_cpu(1)
 
@@ -73,11 +73,11 @@ def test_toy_example(fake_grn, fake_adata, fake_snp_score, tmp_path):
     # test plotting
     plt.switch_backend("Agg")  # non-interactive backend (don't display plots)
 
-    with plot_nonempty() as buf:
+    with check_plot_nonempty() as buf:
         s2c.plot_group_summary(score_key="snp_score")
         plt.savefig(buf, format="png")
 
-    with plot_nonempty() as buf:
+    with check_plot_nonempty() as buf:
         s2c.plot_group_heatmap(score_key="snp_score", query="")
         plt.savefig(buf, format="png")
 
