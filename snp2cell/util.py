@@ -279,7 +279,7 @@ def _calc_per_region_bf(region_id: str, region_df: pd.DataFrame) -> pd.Series:
 def load_fgwas_scores(
     fgwas_output_path: os.PathLike,
     region_loc_path: os.PathLike,
-    rbf_table_path: os.PathLike,
+    rbf_table_path: typing.Optional[os.PathLike] = None,
     lexpand: int = 250,
     rexpand: int = 250,
     num_cores: typing.Optional[int] = None,
@@ -304,6 +304,8 @@ def load_fgwas_scores(
         Path to fgwas output file with Bayes Factors.
     region_loc_path : os.PathLike
         Path to region location file (result from `export_for_fgwas()`).
+    rbf_table_path : typing.Optional[os.PathLike]
+        Path to save the RBF table. Not saving table if `None`. (default: `None`)
     lexpand : int
         Number of base pairs to expand the region to the left (default: 250).
     rexpand : int
@@ -339,9 +341,10 @@ def load_fgwas_scores(
     )
     region_info["ID"] = region_info.index
 
-    region_info[["name", "ID", "hm_chr", "hm_pos", "log_RBF"]].to_csv(
-        rbf_table_path, sep="\t", index=False
-    )
+    if rbf_table_path is not None:
+        region_info[["name", "ID", "hm_chr", "hm_pos", "log_RBF"]].to_csv(
+            rbf_table_path, sep="\t", index=False
+        )
 
     # prepare log RBF scores
     scores = region_info.set_index("name")["log_RBF"].sort_values(ascending=False)
