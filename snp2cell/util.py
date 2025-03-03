@@ -11,6 +11,7 @@ import multiprocessing as mp
 import dill
 import networkx as nx
 import numpy as np
+from scipy.special import logsumexp
 import pandas as pd
 import pyranges
 import pybiomart
@@ -266,12 +267,12 @@ def export_for_fgwas(
 
 def _calc_per_region_bf(region_id: str, region_df: pd.DataFrame) -> pd.Series:
     """
-    calculate regional Bayes factors per group (used in `load_fgwas_scores`)
+    calculate regional log Bayes factors per group (used in `load_fgwas_scores`)
     """
-    w = np.exp(region_df["SNP_rel_loc"])
-    bf = np.exp(region_df["SNP_BF"])
-    rbf = (bf * w).sum() / w.sum()
-    return pd.Series(rbf, index=[region_id])
+    log_numerator = logsumexp(region_df["SNP_BF"] + region_df["SNP_rel_loc"])
+    log_denominator = logsumexp(region_df["SNP_rel_loc"])
+    log_bf = log_numerator - log_denominator
+    return pd.Series(log_bf, index=[region_id])
 
 
 @add_logger()
@@ -322,7 +323,7 @@ def load_fgwas_scores(
         num_cores = snp2cell.NCPU
     log.info(f"using {num_cores} cores")
 
-    # load fgwas output
+    # load fgwas output: SNP_BF (log BF), SNP_rel_loc (log weight including distance and LD score)
     df = pd.read_csv(fgwas_output_path, sep="\t", header=None)
     df.columns = ["regionID", "SNP_BF", "SNP_rel_loc"]
 
@@ -332,20 +333,18 @@ def load_fgwas_scores(
 
     # add region information from region_loc_path
     region_info = pd.read_csv(region_loc_path, sep="\t")
-    region_info["RBF"] = region_info.index.map(res)
+    region_info["log_RBF"] = region_info.index.map(res)
     region_info["name"] = region_info.apply(
         lambda r: f"chr{int(r['hm_chr'])}:{int(r['hm_pos'])}-{int(r['hm_pos'])}", axis=1
     )
     region_info["ID"] = region_info.index
 
-    region_info[["name", "ID", "hm_chr", "hm_pos", "RBF"]].to_csv(
+    region_info[["name", "ID", "hm_chr", "hm_pos", "log_RBF"]].to_csv(
         rbf_table_path, sep="\t", index=False
     )
 
-    # calculate log RBF scores
-    scores = (
-        region_info.set_index("name")["RBF"].apply(np.log).sort_values(ascending=False)
-    )
+    # prepare log RBF scores
+    scores = region_info.set_index("name")["log_RBF"].sort_values(ascending=False)
 
     def rename(s):
         # expand region to full length
