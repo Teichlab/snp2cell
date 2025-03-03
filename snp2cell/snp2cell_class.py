@@ -354,7 +354,12 @@ class SNP2CELL:
         with open(path, "wb") as f:
             dill.dump(self, f)
 
-    def save_data(self, path: Union[str, os.PathLike]) -> None:
+    @add_logger(show_start_end=False)
+    def save_data(
+        self,
+        path: Union[str, os.PathLike],
+        log: logging.Logger = logging.getLogger(),
+    ) -> None:
         """
         Save object data. Reload using `s2c = SNP2CELL(<path>)`.
 
@@ -374,6 +379,7 @@ class SNP2CELL:
         }
         with open(path, "wb") as f:
             dill.dump(data, f)
+        log.info(f"saved data to: '{Path(path).resolve()}'")
 
     def load_data(self, path: Union[str, os.PathLike], overwrite: bool = False) -> None:
         """
