@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from enum import Enum
 from typing import Literal, Union, Optional, Any, Iterable, Dict, List, Tuple
+import warnings
 
 import dill
 import matplotlib as mpl
@@ -862,7 +863,11 @@ class SNP2CELL:
             kwargs["rankby_abs"] = True
 
         log.info(f"finding DE genes for annotation {groupby}")
-        sc.tl.rank_genes_groups(self.adata, groupby=groupby, **kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter(
+                action="ignore", category=pd.errors.PerformanceWarning
+            )
+            sc.tl.rank_genes_groups(self.adata, groupby=groupby, **kwargs)
 
         if "method" in kwargs and kwargs["method"] == "logreg":
             de_df = get_rank_df(self.adata)
