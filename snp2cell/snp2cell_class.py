@@ -766,7 +766,9 @@ class SNP2CELL:
         Parameters
         ----------
         combine : Iterable[Tuple[str, str, str]]
-            List of score pairs for which to create random permutation background. This is a list of triples, also containing an optional suffix for each pair. Currently, the only allowed suffix is "__zscore" (which will combine zscores instead of using permuted scores directly).
+            List of score pairs for which to create random permutation background.
+            This is a list of triples, also containing an optional suffix for each pair.
+            Available suffix options are: {_SUFFIX_}.
         scale : bool, optional
             Whether to scale scores between 0 and 1 before combining, by default False.
         log : logging.Logger, optional
@@ -1250,7 +1252,7 @@ class SNP2CELL:
         """
         if plt_df is None:
             if score_key:
-                kwargs["regex"] = f"^min.*{score_key}.*zscore$"
+                kwargs["regex"] = f"^min.*{score_key}.*zscore_mad$"
                 if "query" not in kwargs:
                     kwargs["query"] = f"{score_key}__pval < 0.05"
             plt_df = self.get_scores(**kwargs)
@@ -1311,7 +1313,7 @@ class SNP2CELL:
         """
         if plt_df is None:
             if score_key:
-                kwargs["regex"] = f"^min.*{score_key}.*zscore$"
+                kwargs["regex"] = f"^min.*{score_key}.*zscore_mad$"
                 if "query" not in kwargs:
                     kwargs["query"] = f"{score_key}__pval < 0.05"
             plt_df = self.get_scores(**kwargs)
@@ -1485,6 +1487,9 @@ class SNP2CELL:
 
 
 SNP2CELL._get_perturbed_stats.__doc__ = SNP2CELL._get_perturbed_stats.__doc__.format(
+    _SUFFIX_=str([e.value for e in SUFFIX])
+)
+SNP2CELL.combine_scores_rand.__doc__ = SNP2CELL.combine_scores_rand.__doc__.format(
     _SUFFIX_=str([e.value for e in SUFFIX])
 )
 SNP2CELL.adata_combine_de_scores.__doc__ = (
