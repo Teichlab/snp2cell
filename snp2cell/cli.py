@@ -188,7 +188,7 @@ def score_snp(
         ),
     ],
     rbf_table_path: Annotated[
-        Path,
+        typing.Optional[Path],
         typer.Option(
             "--output-table",
             "-o",
@@ -204,7 +204,6 @@ def score_snp(
             "--lexpand",
             "-l",
             help="number of base pairs to expand the region to the left",
-            default=250,
         ),
     ] = 250,
     rexpand: Annotated[
@@ -213,7 +212,6 @@ def score_snp(
             "--rexpand",
             "-r",
             help="number of base pairs to expand the region to the right",
-            default=250,
         ),
     ] = 250,
     pos2gene: Annotated[
@@ -260,6 +258,8 @@ def score_snp(
         fgwas_output_path=fgwas_output_path,
         region_loc_path=region_loc_path,
         rbf_table_path=rbf_table_path,
+        lexpand=lexpand,
+        rexpand=rexpand,
         num_cores=n_cpu,
     )
     log.info(f"computed scores for {len(snp_scr)} regions")
