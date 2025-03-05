@@ -263,6 +263,9 @@ def export_for_fgwas(
 
     pos_df.to_csv(f"{region_loc_path}.gz", sep="\t", header=False, index=False)
     pos_df.to_csv(region_loc_path, sep="\t", header=True, index=False)
+    log.info(
+        f"saved {pos_df.shape[0]} region locations to '{region_loc_path}' and '{region_loc_path}.gz'."
+    )
 
 
 def _calc_per_region_bf(region_id: str, region_df: pd.DataFrame) -> pd.Series:
@@ -326,14 +329,17 @@ def load_fgwas_scores(
     log.info(f"using {num_cores} cores")
 
     # load fgwas output: SNP_BF (log BF), SNP_rel_loc (log weight including distance and LD score)
+    log.info(f"loading fgwas output from '{fgwas_output_path}'")
     df = pd.read_csv(fgwas_output_path, sep="\t", header=None)
     df.columns = ["regionID", "SNP_BF", "SNP_rel_loc"]
 
+    log.info(f"calculating regional Bayes factors")
     with mp.Pool(num_cores) as pool:
         res = pool.starmap(_calc_per_region_bf, df.groupby("regionID"))
     res = pd.concat(res)
 
     # add region information from region_loc_path
+    log.info(f"loading region locations from '{region_loc_path}'")
     region_info = pd.read_csv(region_loc_path, sep="\t")
     region_info["log_RBF"] = region_info.index.map(res)
     region_info["name"] = region_info.apply(
@@ -342,11 +348,15 @@ def load_fgwas_scores(
     region_info["ID"] = region_info.index
 
     if rbf_table_path is not None:
+        log.info(f"saving RBF table to '{rbf_table_path}'")
         region_info[["name", "ID", "hm_chr", "hm_pos", "log_RBF"]].to_csv(
             rbf_table_path, sep="\t", index=False
         )
 
     # prepare log RBF scores
+    log.info(
+        f"expanding region locations by -{lexpand} and +{rexpand} bp and returning {region_info.shape[0]} scores"
+    )
     scores = region_info.set_index("name")["log_RBF"].sort_values(ascending=False)
 
     def rename(s):
