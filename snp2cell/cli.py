@@ -1,14 +1,17 @@
 import logging
+import os
 import pickle
 import typing
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
+from urllib.parse import urlparse
 
 import pandas as pd
 import scanpy as sc
 import typer  # type: ignore
 from typing_extensions import Annotated
+import networkx as nx
 
 import snp2cell
 from snp2cell.recipes import filter_summ_stat_file
@@ -73,7 +76,6 @@ def create_gene2pos_mapping(
     )
 
 
-@app.command()
 def filter_summ_stats(
     s2c_obj: Annotated[Path, typer.Argument(help="path to SNP2CELL object")],
     summ_stat_bed: Annotated[
@@ -104,8 +106,7 @@ def filter_summ_stats(
 ):
     """
     Filter a file with summary statistics by the genomic locations of network nodes in s2c object and merge
-    with linkage-disequilibrium scores (l2) from a second file. The resulting file can be used as an input
-    for `score_snp`.
+    with linkage-disequilibrium scores (l2) from a second file.
 
     `summ_stat_bed` needs to be a bed style tsv file with a header and at least these columns:
     ["Chromosome", "Start", "End", "Beta", "SE"]
@@ -126,20 +127,101 @@ def filter_summ_stats(
 
 @app.command()
 @add_logger()
-def score_snp(
+def export_locations(
     s2c_obj: Annotated[Path, typer.Argument(help="path to SNP2CELL object")],
-    summ_stat_bed: Annotated[
-        Path, typer.Argument(help="path to tsv file with summary statistics")
-    ],
-    save_key: Annotated[
-        str, typer.Option("--save-key", "-k", help="name for saving scores in object")
-    ] = "snp_score",
-    pos2gene_csv: Annotated[
+    region_loc_path: Annotated[
+        Path, typer.Option("--output", "-o", help="output path for regions")
+    ] = "peak_locations.txt",
+    pos2gene: Annotated[
         typing.Optional[Path],
         typer.Option(
             "--pos2gene",
             "-p",
-            help="csv file with no header and location (chrX:XXX-XXX) to gene symbol mapping; default: retrieve from biomart",
+            help="csv file with no header and location (chrX:XXX-XXX) to gene symbol mapping. If not provided, no mapping will be done. If a path is provided the mapping will be read from the file. If a URL is provided, the mapping will be queried from biomart.",
+        ),
+    ] = None,
+    log=logging.getLogger(),
+):
+    """
+    Save the genomic locations of network nodes in the s2c object to a tsv file.
+    """
+    # load object
+    log.info("load SNP2CELL object")
+    s2c = SNP2CELL(s2c_obj)
+
+    # translate gene names to locations
+    if pos2gene is not None:
+        if os.path.exists(pos2gene):
+            log.info(f"get pos2gene mapping from file: {Path(pos2gene).resolve()}")
+            pos2gene_dict = pd.read_csv(pos2gene, header=None, index_col=0)[1].to_dict()
+            gene2pos_dict = {v: k for k, v in pos2gene_dict.items()}
+        elif bool(urlparse(pos2gene).scheme and urlparse(pos2gene).netloc):
+            log.info(f"query biomart for pos2gene mapping: '{pos2gene}'")
+            gene2pos_dict = snp2cell.util.get_gene2pos_mapping(rev=False)
+        else:
+            log.error(
+                f"pos2gene file '{pos2gene}' does not exist and is not a valid URL"
+            )
+            raise FileNotFoundError(pos2gene)
+        log.info(f"translate genes to locations")
+        s2c.grn = nx.relabel_nodes(s2c.grn, gene2pos_dict)
+
+    # save
+    log.info(f"save regions to {Path(region_loc_path).resolve()}")
+    s2c.util.export_for_fgwas(s2c, region_loc_path=region_loc_path)
+
+
+@app.command()
+@add_logger()
+def score_snp(
+    s2c_obj: Annotated[Path, typer.Argument(help="path to SNP2CELL object")],
+    fgwas_output_path: Annotated[
+        Path,
+        typer.Argument(
+            help="path to tsv.gz file with SNP Bayes factors and weights per region calculated by nf-fgwas"
+        ),
+    ],
+    region_loc_path: Annotated[
+        Path,
+        typer.Argument(
+            help="path to tsv file with genomic locations of regions (result from `export_locations()`)"
+        ),
+    ],
+    rbf_table_path: Annotated[
+        Path,
+        typer.Option(
+            "--output-table",
+            "-o",
+            help="path for saving the Regional Bayes Factors (RBF) as a table. If not provided, the table will not be saved.",
+        ),
+    ] = None,
+    save_key: Annotated[
+        str, typer.Option("--save-key", "-k", help="name for saving scores in object")
+    ] = "snp_score",
+    lexpand: Annotated[
+        int,
+        typer.Option(
+            "--lexpand",
+            "-l",
+            help="number of base pairs to expand the region to the left",
+            default=250,
+        ),
+    ] = 250,
+    rexpand: Annotated[
+        int,
+        typer.Option(
+            "--rexpand",
+            "-r",
+            help="number of base pairs to expand the region to the right",
+            default=250,
+        ),
+    ] = 250,
+    pos2gene: Annotated[
+        typing.Optional[Path],
+        typer.Option(
+            "--pos2gene",
+            "-p",
+            help="csv file with no header and location (chrX:XXX-XXX) to gene symbol mapping. If not provided, no mapping will be done. If a path is provided the mapping will be read from the file. If a URL is provided, the mapping will be queried from biomart.",
         ),
     ] = None,
     n_cpu: Annotated[
@@ -148,39 +230,129 @@ def score_snp(
     log=logging.getLogger(),
 ):
     """
-    Calculate scores for network nodes based on GWAS summary statistics, propagate the scores across the network
+    Add fGWAS scores for network nodes based on GWAS summary statistics. Then propagate the scores across the network
     and calculate statistics based on random permutations. All calculated information will be saved in the s2c object.
 
-    `summ_stat_bed` needs to be a bed style tsv file with a header and at least these columns:
-    ["Chromosome", "Start", "End", "Beta", "SE", "L2"]
-    This file can be created with `filter_summ_stats`.
+    This assumes the nf-fgwas pipeline (https://github.com/cellgeni/nf-fgwas) has been run.
+    The nf-fgwas output file should then be in a folder like `results/LDSC_results/<studyid>/input.gz`.
+    The region location file (nf-fgwas input) can be generated with `export_for_fgwas()`.
+
+    Calculated Regional Bayes Factors (RBF) can be saved to a table by setting --output-table.
+    The columns in the output file correspond to: region ID, SNP log BF, SNP log weight including distance and LD score.
+
+    For the scores added to the snp2cell object, the region locations are expanded to the full length of the region (`--lexpand` and `--rexpand`).
+    This is assuming that each region was represented by its center for the fgwas analysis and that all regions have the same length (default 500bp).
+    If this is not the case, you can use the returned data frame and expand the regions manually.
     """
     # load object
     log.info("load SNP2CELL object")
     s2c = SNP2CELL(s2c_obj)
 
+    if not isinstance(s2c.grn, nx.Graph):
+        msg = "GRN should be a networkx graph"
+        log.error(msg)
+        raise ValueError(msg)
+
     # load SNP scores
-    log.info(f"load summary statistics from {Path(summ_stat_bed).resolve()}")
-    assert s2c.grn
-    regions = [n for n in s2c.grn.nodes if n[:3] == "chr"]
-    log.info("compute SNP scores")
-    snp_scr = snp2cell.util.get_snp_scores_parallel(
-        regions, summ_stat_bed, num_cores=n_cpu
+    log.info(f"load fgwas SNP BFs from {Path(fgwas_output_path).resolve()}")
+    log.info(f"compute SNP scores")
+    snp_scr, _ = snp2cell.util.load_fgwas_scores(
+        fgwas_output_path=fgwas_output_path,
+        region_loc_path=region_loc_path,
+        rbf_table_path=rbf_table_path,
+        num_cores=n_cpu,
     )
+    log.info(f"computed scores for {len(snp_scr)} regions")
+    log.info(f"top scores: \n{pd.Series(snp_scr).sort_values(ascending=False)[:5]}")
 
     # translate locations to genes
-    if pos2gene_csv:
-        log.info(f"get pos2gene mapping from file: {Path(pos2gene_csv).resolve()}")
-        pos2gene = pd.read_csv(pos2gene_csv, header=None, index_col=0)[1].to_dict()
-    else:
-        log.info("query biomart for pos2gene mapping")
-        pos2gene = snp2cell.util.get_gene2pos_mapping(rev=True)
-    snp_scr = {(pos2gene[k] if k in pos2gene else k): v for k, v in snp_scr.items()}
-    log.info(f"top scores: \n{pd.Series(snp_scr).sort_values(ascending=False)[:5]}")
+    if pos2gene is not None:
+        if os.path.exists(pos2gene):
+            log.info(f"get pos2gene mapping from file: {Path(pos2gene).resolve()}")
+            pos2gene_dict = pd.read_csv(pos2gene, header=None, index_col=0)[1].to_dict()
+        elif bool(urlparse(pos2gene).scheme and urlparse(pos2gene).netloc):
+            log.info(f"query biomart for pos2gene mapping: '{pos2gene}'")
+            pos2gene_dict = snp2cell.util.get_gene2pos_mapping(rev=True)
+        else:
+            log.error(
+                f"pos2gene file '{pos2gene}' does not exist and is not a valid URL"
+            )
+            raise FileNotFoundError(pos2gene)
+        log.info(f"translate locations to genes")
+        snp_scr = {
+            (pos2gene_dict[k] if k in pos2gene_dict else k): v
+            for k, v in snp_scr.items()
+        }
 
     # propagate score
     log.info("add scores to SNP2CELL object")
     s2c.add_score(snp_scr, score_key=save_key, num_cores=n_cpu)
+
+    # save
+    log.info(f"save SNP2CELL object to {Path(s2c_obj).resolve()}")
+    s2c.save_data(s2c_obj)
+
+
+@app.command()
+@add_logger()
+def add_score(
+    s2c_obj: Annotated[Path, typer.Argument(help="path to SNP2CELL object")],
+    score_file: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to tsv file with scores for network nodes. Assuming there is no header and the first column contains the node names, the second column the scores."
+        ),
+    ],
+    save_key: Annotated[
+        str, typer.Option("--save-key", "-k", help="name for saving scores in object")
+    ] = "snp_score",
+    pos2gene: Annotated[
+        typing.Optional[Path],
+        typer.Option(
+            "--pos2gene",
+            "-p",
+            help="csv file with no header and location (chrX:XXX-XXX) to gene symbol mapping. If not provided, no mapping will be done. If a path is provided the mapping will be read from the file. If a URL is provided, the mapping will be queried from biomart.",
+        ),
+    ] = None,
+    n_cpu: Annotated[
+        typing.Optional[int], typer.Option(help="number of cpus to use")
+    ] = None,
+    log=logging.getLogger(),
+):
+    """
+    Add scores for network nodes to the s2c object and propagate the scores across the network.
+    """
+    # load object
+    log.info("load SNP2CELL object")
+    s2c = SNP2CELL(s2c_obj)
+
+    # load scores
+    log.info(f"load scores from {Path(score_file).resolve()}")
+    scores = pd.read_csv(score_file, sep="\t", index_col=0, header=None).squeeze()
+    log.info(f"top scores: \n{scores.sort_values(ascending=False)[:5]}")
+
+    # translate locations to genes
+    if pos2gene is not None:
+        if os.path.exists(pos2gene):
+            log.info(f"get pos2gene mapping from file: {Path(pos2gene).resolve()}")
+            pos2gene_dict = pd.read_csv(pos2gene, header=None, index_col=0)[1].to_dict()
+        elif bool(urlparse(pos2gene).scheme and urlparse(pos2gene).netloc):
+            log.info(f"query biomart for pos2gene mapping: '{pos2gene}'")
+            pos2gene_dict = snp2cell.util.get_gene2pos_mapping(rev=True)
+        else:
+            log.error(
+                f"pos2gene file '{pos2gene}' does not exist and is not a valid URL"
+            )
+            raise FileNotFoundError(pos2gene)
+        log.info(f"translate locations to genes")
+        scores = {
+            (pos2gene_dict[k] if k in pos2gene_dict else k): v
+            for k, v in scores.items()
+        }
+
+    # propagate score
+    log.info("add scores to SNP2CELL object")
+    s2c.add_score(scores.to_dict(), score_key=save_key, num_cores=n_cpu)
 
     # save
     log.info(f"save SNP2CELL object to {Path(s2c_obj).resolve()}")
