@@ -1221,8 +1221,8 @@ class SNP2CELL:
 
         There are three ways to select scores for plotting:
         1. Set `plt_df` to a data frame with scores. This will plot all scores in the data frame.
-        2. Set `score_key` to a key of a score to plot. This will plot all combinations of this score with other scores.
-        3. Set `**kwargs` to options passed to `get_scores(**kwargs)` for retrieving scores to plot.
+        2. Set `score_key` to a key of a score to plot. This will plot all combinations of this score with other scores (`^min.*{score_key}.*zscore_mad$`).
+           `**kwargs` will be passed to `get_scores(**kwargs)`. If `query` is not in `kwargs`, it will be set to `f"{score_key}__pval < 0.05"`.
 
         Parameters
         ----------
@@ -1294,14 +1294,26 @@ class SNP2CELL:
         **kwargs: Any,
     ) -> None:
         """
-        Plot scores.
+        Plot score by node heatmap. Rows and columns are clustered and ordered by optimal leaf ordering.
+
+        There are two ways to select scores for plotting:
+        1. Set `plt_df` to a data frame with scores. This will plot all scores in the data frame.
+        2. Set `score_key` to a key of a score to plot. This will plot all combinations of this score with other scores (`^min.*{score_key}.*zscore_mad$`).
+           `**kwargs` will be passed to `get_scores(**kwargs)`. If `query` is not in `kwargs`, it will be set to `f"{score_key}__pval < 0.05"`.
 
         Parameters
         ----------
-        std_cutoff : float, optional
-            Cutoff on standard deviation for selecting nodes with larger variation across scores, by default 1.
+        score_key : str, optional
+            Key of the score to plot, by default "score".
+        plt_df : Optional[pd.DataFrame], optional
+            Data frame with scores to plot (as retrieved by `snp2cell.get_scores()`), by default None.
+            If not set, scores in the object will be plotted.
+        topn : int, optional
+            Number of top scores to plot, by default 5.
         row_pattern : str, optional
             Regex for extracting names for plotting from the score names, by default ".*DE_(?P<rowname>.+?)__".
+        figsize : Tuple[int, int], optional
+            Figure size, by default (7, 7).
         dendrogram_ratio : Tuple[float, float], optional
             Ratio of the dendrogram size to the heatmap size, by default (0.1, 0.1).
         kwargs : Any
@@ -1368,6 +1380,34 @@ class SNP2CELL:
         vmin_region: Optional[float] = None,
         vmax_region: Optional[float] = None,
     ):
+        """
+        Plot network around a gene.
+
+        Starting from a gene, neighboring nodes in either upstream or downstream direction are selected based on their score (top `n_neighbors` nodes selected).
+        The process is repeated for `hops` number of steps, to include neighbors of neighbors, etc.
+        The network is plotted with nodes colored by their score.
+
+        Parameters
+        ----------
+        score : str
+            Score to plot.
+        gene : str
+            Gene to center the plot around.
+        direction : Literal["upstream", "downstream"], optional
+            Direction to plot in, by default "upstream".
+        n_neighbors : Tuple, optional
+            Number of neighbors to select at each hop, by default (5, 10).
+        hops : int, optional
+            Number of hops in the network to plot, by default 2.
+        vmin_gene : Optional[float], optional
+            Minimum value for gene scores, by default None.
+        vmax_gene : Optional[float], optional
+            Maximum value for gene scores, by default None.
+        vmin_region : Optional[float], optional
+            Minimum value for region scores, by default None.
+        vmax_region : Optional[float], optional
+            Maximum value for region scores, by default None.
+        """
         # TODO: this is specific for eGRNs
         G = self.grn
         if not isinstance(G, nx.DiGraph):
