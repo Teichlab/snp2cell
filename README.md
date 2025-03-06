@@ -92,6 +92,7 @@ snp2cell --install-completion bash
 ## Example notebooks
 
 - [toy example](https://github.com/Teichlab/snp2cell/blob/main/docs/source/toy_example.ipynb)
+- [GWAS analysis](https://github.com/Teichlab/snp2cell/blob/main/docs/source/snp2cell_fgwas_scores.ipynb)
 
 ## Citation
 
