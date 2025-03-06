@@ -106,6 +106,7 @@ def loop_parallel(
     num_cores: typing.Optional[int] = None,
     total: typing.Optional[int] = None,
     timeout: typing.Optional[int] = None,
+    debug: bool = False,
     log: logging.Logger = logging.getLogger(),
     *args: typing.Any,
     **kwargs: typing.Any,
@@ -124,7 +125,9 @@ def loop_parallel(
     total : typing.Optional[int]
         total number of iterations (Default value = None)
     timeout : typing.Optional[int]
-        timeout in seconds for each worker (Default value = None)
+        timeout in seconds for each worker (Default value = None, uses a default of 3600)
+    debug : bool
+        enable verbose output (may break progress bar) (Default value = False)
     log : logging.Logger (Default value = logging.getLogger())
         logger object
     args :
@@ -143,8 +146,10 @@ def loop_parallel(
 
     inputs = tqdm(loop_iter, position=0, leave=True, total=total)
 
-    # Set a longer timeout and add some error handling
-    return Parallel(n_jobs=num_cores, timeout=timeout or 3600, verbose=10)(
+    # Set verbosity level based on debug flag - only use verbose output if explicitly requested
+    verbose = 10 if debug else 0
+
+    return Parallel(n_jobs=num_cores, timeout=timeout or 3600, verbose=verbose)(
         delayed(func)(i, *args, **kwargs) for i in inputs
     )
 
