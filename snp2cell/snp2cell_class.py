@@ -136,7 +136,7 @@ class SNP2CELL:
             if shared_keys:
                 raise ValueError(f"Groups {shared_keys} already exist in {k}")
 
-        self.de_groups[groupby] = groups
+        self.de_groups[groupby] = groups.copy()
 
     def _scale_score(
         self,
@@ -899,7 +899,7 @@ class SNP2CELL:
         self._add_de_groups(groupby, groups)
 
         score_keys = []
-        for grp in groups:
+        for grp in groups.copy():
             if "method" in kwargs and kwargs["method"] == "logreg":
                 query_str = f"group == '{grp}'"
             else:
