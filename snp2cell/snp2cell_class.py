@@ -878,6 +878,7 @@ class SNP2CELL:
             warnings.simplefilter(
                 action="ignore", category=pd.errors.PerformanceWarning
             )
+            log.info("running scanpy rank_genes_groups...")
             sc.tl.rank_genes_groups(self.adata, groupby=groupby, **kwargs)
 
         if "method" in kwargs and kwargs["method"] == "logreg":
