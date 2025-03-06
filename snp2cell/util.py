@@ -268,10 +268,11 @@ def export_for_fgwas(
     )
 
 
-def _calc_per_region_bf(region_id: str, region_df: pd.DataFrame) -> pd.Series:
+def _calc_per_region_bf(args: tuple[str, pd.DataFrame]) -> pd.Series:
     """
     calculate regional log Bayes factors per group (used in `load_fgwas_scores`)
     """
+    region_id, region_df = args
     log_numerator = logsumexp(region_df["SNP_BF"] + region_df["SNP_rel_loc"])
     log_denominator = logsumexp(region_df["SNP_rel_loc"])
     log_bf = log_numerator - log_denominator
@@ -334,8 +335,15 @@ def load_fgwas_scores(
     df.columns = ["regionID", "SNP_BF", "SNP_rel_loc"]
 
     log.info(f"calculating regional Bayes factors")
+    region_groups = list(df.groupby("regionID"))
     with mp.Pool(num_cores) as pool:
-        res = pool.starmap(_calc_per_region_bf, df.groupby("regionID"))
+        res = list(
+            tqdm(
+                pool.imap_unordered(_calc_per_region_bf, region_groups),
+                total=len(region_groups),
+                desc="Calculating RBFs",
+            )
+        )
     res = pd.concat(res)
 
     # add region information from region_loc_path
