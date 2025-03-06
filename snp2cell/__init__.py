@@ -3,6 +3,6 @@ from snp2cell import util
 from snp2cell import cli
 from snp2cell import recipes
 
-__version__ = "0.2.2"
+__version__ = "0.3.0"
 __author__ = "J.P.Pett"
 __credits__ = "Wellcome Sanger Institute"
