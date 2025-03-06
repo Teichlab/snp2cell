@@ -22,6 +22,7 @@ import scanpy as sc
 import scipy as sp
 import seaborn as sns
 import statsmodels.api as sm
+import snp2cell.util
 from snp2cell.util import add_logger, loop_parallel, get_rank_df
 
 RAW_COUNT_THR = 50
@@ -1306,7 +1307,7 @@ class SNP2CELL:
         plt_df: Optional[pd.DataFrame] = None,
         genes_per_score: int = 5,
         n_col: Optional[int] = 30,
-        asinh_transform: bool = False,
+        transform: Optional[Tuple[Literal["asinh", "logmod"], float]] = None,
         row_pattern: str = ".*DE_(?P<rowname>.+?)__",
         figsize: Tuple[int, int] = (7, 7),
         dendrogram_ratio: Tuple[float, float] = (0.1, 0.1),
@@ -1337,8 +1338,10 @@ class SNP2CELL:
             Number of top genes to plot per score, by default 5.
         n_col : int, optional
             Number of top scores / columns to plot, by default 30.
-        asinh_transform : bool
-            Whether to apply an arcsinh transformation to the scores to reduce the effect of outliers, by default False.
+        transform : Optional[Tuple[Literal["asinh", "logmod"], float]], optional
+            If not None, apply transform scores to reduce the effect of outliers.
+            The first element of the tuple is the transformation to apply, the second element is the parameter with larger values corresponding to stronger compression.
+            Options are: ("asinh", <parameter>) or ("logmod", <parameter>).
         row_pattern : str, optional
             Regex for extracting names for plotting from the score names, by default ".*DE_(?P<rowname>.+?)__".
         figsize : Tuple[int, int], optional
@@ -1372,8 +1375,13 @@ class SNP2CELL:
                 :, plt_df.mean(axis=0).nlargest(min(n_col, plt_df.shape[1])).index
             ]
 
-        if asinh_transform:
-            plt_df = np.arcsinh(plt_df)
+        if transform is not None:
+            if transform[0] == "asinh":
+                plt_df = snp2cell.util.parameterized_asinh(plt_df, transform[1])
+            elif transform[0] == "logmod":
+                plt_df = snp2cell.util.parameterized_log_modulus(plt_df, transform[1])
+            else:
+                raise ValueError(f"unknown transformation: '{transform[0]}'")
 
         rows = []
         for c in plt_df:

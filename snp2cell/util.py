@@ -99,6 +99,24 @@ def test_logging(log=logging.getLogger()):
     log.error("hello logger")
 
 
+def parameterized_asinh(x, a=1.0):
+    """
+    scale values by: `asinh(x * a) / a`
+
+    smaller values of a will result in less compression
+    """
+    return np.arcsinh(a * x) / a
+
+
+def parameterized_log_modulus(x, a=1.0):
+    """
+    scale values by: `sign(x) * log(abs(x) * a + 1)`
+
+    smaller values of a will result in less compression
+    """
+    return np.sign(x) * np.log(np.abs(x) * a + 1)
+
+
 @add_logger(show_start_end=False)
 def loop_parallel(
     loop_iter: typing.Iterable,
