@@ -578,7 +578,8 @@ class SNP2CELL:
                 log.warning(f"score {k} is all zero, skipping")
         score_keys = list(use_scores)
 
-        log.info(f"propagating scores: {score_keys}")
+        log.info(f"propagating scores")
+        log.debug(f"scores to propagate: {score_keys}")
         prop_scores = loop_parallel(
             score_keys, self.propagate_score, num_cores=num_cores
         )
@@ -626,7 +627,8 @@ class SNP2CELL:
             np.random.seed(self.seed)
 
         self._check_init()
-        log.info(f"create {n} permutations of score {score_key}")
+        log.info(f"create {n} permutations")
+        log.debug(f"creating permutations for scores: {score_key}")
         if isinstance(score_key, str):
             score_key = [score_key]
         if not perturb_key:
@@ -643,11 +645,11 @@ class SNP2CELL:
 
             pers_rand.append(dict(zip(node_list, vals_list)))
 
-        log.info("propagating permutations")
+        log.debug("propagating permutations")
         prop_scores = loop_parallel(
             pers_rand, self._prop_scr, num_cores=num_cores, timeout=timeout
         )
-        log.info(f"storing scores under key {perturb_key}")
+        log.debug(f"storing scores under key {perturb_key}")
         self.scores_rand[perturb_key] = pd.DataFrame(
             prop_scores, index=range(len(prop_scores))
         )
@@ -669,7 +671,8 @@ class SNP2CELL:
             Logger, by default logging.getLogger().
         """
         self._check_init()
-        log.info(f"adding statistics for: {score_keys}")
+        log.info(f"adding statistics")
+        log.debug(f"adding statistics for scores: {score_keys}")
         if isinstance(score_keys, str):
             score_keys = [score_keys]
         if isinstance(score_keys, list):
@@ -743,7 +746,8 @@ class SNP2CELL:
             Logger, by default logging.getLogger().
         """
         self._check_init()
-        log.info(f"combining scores: {combine}")
+        log.info(f"combining scores")
+        log.debug(f"scores to combine: {combine}")
         for key1, key2 in combine:
             if scale:
                 scr1 = self._scale_score(
@@ -780,7 +784,8 @@ class SNP2CELL:
         log : logging.Logger, optional
             Logger, by default logging.getLogger().
         """
-        log.info(f"combining scores: {combine}")
+        log.info(f"combining scores")
+        log.debug(f"scores to combine: {combine}")
         for key1, key2, suffix in combine:
             scr1: pd.DataFrame
             scr2: pd.DataFrame

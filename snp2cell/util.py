@@ -70,9 +70,9 @@ def add_logger(show_start_end: bool = True) -> typing.Callable[[F], F]:
                 log.addHandler(c_handler)
 
             if show_start_end:
-                log.info(f"----- starting {func_name} -----")
+                log.debug(f"----- starting {func_name} -----")
                 r = f(*args, **kargs, log=log)
-                log.info(f"----- finished {func_name} -----")
+                log.debug(f"----- finished {func_name} -----")
             else:
                 r = f(*args, **kargs, log=log)
             return r
