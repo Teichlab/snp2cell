@@ -691,7 +691,7 @@ class SNP2CELL:
                 self.scores_rand[p_key], axis=0, scale=1.0
             )
             zscore_mad = (
-                0.6745
+                MAD_SCALE
                 * (self.scores_prop[s_key] - self.scores_rand[p_key].median(axis=0))  # type: ignore
                 / mad
             )
