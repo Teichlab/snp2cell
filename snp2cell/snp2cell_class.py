@@ -593,6 +593,7 @@ class SNP2CELL:
         perturb_key: Optional[str] = None,
         n: int = 1000,
         num_cores: Optional[int] = None,
+        timeout: Optional[int] = None,
         log: logging.Logger = logging.getLogger(),
         reset_seed: Union[bool, int] = True,
     ) -> None:
@@ -609,6 +610,8 @@ class SNP2CELL:
             Number of permutation to create, by default 1000.
         num_cores : Optional[int], optional
             Number of cores to use, by default None.
+        timeout : Optional[int], optional
+            Timeout in seconds for parallel workers.
         log : logging.Logger, optional
             Logger, by default logging.getLogger().
         reset_seed : Union[bool, int], optional
@@ -640,7 +643,9 @@ class SNP2CELL:
             pers_rand.append(dict(zip(node_list, vals_list)))
 
         log.info("propagating permutations")
-        prop_scores = loop_parallel(pers_rand, self._prop_scr, num_cores=num_cores)
+        prop_scores = loop_parallel(
+            pers_rand, self._prop_scr, num_cores=num_cores, timeout=timeout
+        )
         log.info(f"storing scores under key {perturb_key}")
         self.scores_rand[perturb_key] = pd.DataFrame(
             prop_scores, index=range(len(prop_scores))

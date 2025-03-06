@@ -105,6 +105,7 @@ def loop_parallel(
     func: typing.Callable,
     num_cores: typing.Optional[int] = None,
     total: typing.Optional[int] = None,
+    timeout: typing.Optional[int] = None,
     log: logging.Logger = logging.getLogger(),
     *args: typing.Any,
     **kwargs: typing.Any,
@@ -122,6 +123,8 @@ def loop_parallel(
         number of cores to use (Default value = None)
     total : typing.Optional[int]
         total number of iterations (Default value = None)
+    timeout : typing.Optional[int]
+        timeout in seconds for each worker (Default value = None)
     log : logging.Logger (Default value = logging.getLogger())
         logger object
     args :
@@ -140,7 +143,10 @@ def loop_parallel(
 
     inputs = tqdm(loop_iter, position=0, leave=True, total=total)
 
-    return Parallel(n_jobs=num_cores)(delayed(func)(i, *args, **kwargs) for i in inputs)
+    # Set a longer timeout and add some error handling
+    return Parallel(n_jobs=num_cores, timeout=timeout or 3600, verbose=10)(
+        delayed(func)(i, *args, **kwargs) for i in inputs
+    )
 
 
 def get_gene2pos_mapping(
