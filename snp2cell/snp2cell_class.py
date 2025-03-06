@@ -1218,7 +1218,7 @@ class SNP2CELL:
         self,
         score_key: str = "score",
         plt_df: Optional[pd.DataFrame] = None,
-        topn: Optional[int] = None,
+        topn: Optional[int] = 20,
         errorbar: Literal["pi", "std", "ci", "se"] = "ci",
         row_pattern: str = ".*DE_(?P<rowname>.+?)__",
         figsize: Tuple[int, int] = (7, 5),
@@ -1230,8 +1230,14 @@ class SNP2CELL:
 
         There are three ways to select scores for plotting:
         1. Set `plt_df` to a data frame with scores. This will plot all scores in the data frame.
-        2. Set `score_key` to a key of a score to plot. This will plot all combinations of this score with other scores (`^min.*{score_key}.*zscore_mad$`).
+        2. Set `score_key` to a key of a score to plot. This will plot all combinations of this score with other scores.
            `**kwargs` will be passed to `get_scores(**kwargs)`. If `query` is not in `kwargs`, it will be set to `f"{score_key}__pval < 0.05"`.
+            If `regex` is not in `kwargs`, it will be set to `f"^min.*{score_key}.*zscore_mad$`.
+
+        E.g. `regex="^min.*{score_key}.*zscore_mad$"` means that only combinations of score `score_key` with any other scores will be plotted.
+        If this score has been combined with DE scores, for example, this will be the combinations for all cell types.
+        Here `min(...,...)__zscore_mad` means the combined score is the minimum of the two scores, normalized as a robust z-score.
+        The complicated column names are simplified by extracting the cell type names with `row_pattern`, to use for the x-axis of the plot.
 
         Parameters
         ----------
@@ -1241,7 +1247,7 @@ class SNP2CELL:
         plt_df : Optional[pd.DataFrame], optional
             Data frame with scores to plot (as retrieved by `snp2cell.get_scores()`), by default None. If not set, scores in the object will be plotted.
         topn : Optional[int], optional
-            Number of top scores to plot, by default None.
+            Number of top scores to plot, by default 20. If None, all scores will be plotted.
         errorbar : Literal["pi", "std", "ci", "se"], optional
             Type of error bar to plot, by default "ci".
             Options are: "pi" (percentile interval), "std" (standard deviation), "ci" (confidence interval, 95%), "se" (standard error).
@@ -1261,7 +1267,8 @@ class SNP2CELL:
         """
         if plt_df is None:
             if score_key:
-                kwargs["regex"] = f"^min.*{score_key}.*zscore_mad$"
+                if "regex" not in kwargs:
+                    kwargs["regex"] = f"^min.*{score_key}.*zscore_mad$"
                 if "query" not in kwargs:
                     kwargs["query"] = f"{score_key}__pval < 0.05"
             plt_df = self.get_scores(**kwargs)
@@ -1296,7 +1303,9 @@ class SNP2CELL:
         self,
         score_key: str = "score",
         plt_df: Optional[pd.DataFrame] = None,
-        topn: int = 5,
+        genes_per_score: int = 5,
+        n_col: Optional[int] = 30,
+        asinh_transform: bool = False,
         row_pattern: str = ".*DE_(?P<rowname>.+?)__",
         figsize: Tuple[int, int] = (7, 7),
         dendrogram_ratio: Tuple[float, float] = (0.1, 0.1),
@@ -1307,8 +1316,14 @@ class SNP2CELL:
 
         There are two ways to select scores for plotting:
         1. Set `plt_df` to a data frame with scores. This will plot all scores in the data frame.
-        2. Set `score_key` to a key of a score to plot. This will plot all combinations of this score with other scores (`^min.*{score_key}.*zscore_mad$`).
-           `**kwargs` will be passed to `get_scores(**kwargs)`. If `query` is not in `kwargs`, it will be set to `f"{score_key}__pval < 0.05"`.
+        2. Set `score_key` to a key of a score to plot. This will plot all combinations of this score with other scores.
+           `**kwargs` will be passed to `get_scores(**kwargs)`. If `query` is not in `kwargs`, it will be set to `f"~index.str.startswith('chr') and {score_key}__pval < 0.05"`.
+           If `regex` is not in `kwargs`, it will be set to `f"^min.*{score_key}.*zscore_mad$`.
+
+        E.g. `regex="^min.*{score_key}.*zscore_mad$"` means that only combinations of score `score_key` with any other scores will be plotted.
+        If this score has been combined with DE scores, for example, this will be the combinations for all cell types.
+        Here `min(...,...)__zscore_mad` means the combined score is the minimum of the two scores, normalized as a robust z-score.
+        The complicated column names are simplified by extracting the cell type names with `row_pattern`, to use for the x-axis of the plot.
 
         Parameters
         ----------
@@ -1317,8 +1332,12 @@ class SNP2CELL:
         plt_df : Optional[pd.DataFrame], optional
             Data frame with scores to plot (as retrieved by `snp2cell.get_scores()`), by default None.
             If not set, scores in the object will be plotted.
-        topn : int, optional
-            Number of top scores to plot, by default 5.
+        genes_per_score : int
+            Number of top genes to plot per score, by default 5.
+        n_col : int, optional
+            Number of top scores / columns to plot, by default 30.
+        asinh_transform : bool
+            Whether to apply an arcsinh transformation to the scores to reduce the effect of outliers, by default False.
         row_pattern : str, optional
             Regex for extracting names for plotting from the score names, by default ".*DE_(?P<rowname>.+?)__".
         figsize : Tuple[int, int], optional
@@ -1334,9 +1353,12 @@ class SNP2CELL:
         """
         if plt_df is None:
             if score_key:
-                kwargs["regex"] = f"^min.*{score_key}.*zscore_mad$"
+                if "regex" not in kwargs:
+                    kwargs["regex"] = f"^min.*{score_key}.*zscore_mad$"
                 if "query" not in kwargs:
-                    kwargs["query"] = f"{score_key}__pval < 0.05"
+                    kwargs["query"] = (
+                        f"~index.str.startswith('chr') and {score_key}__pval < 0.05"
+                    )
             plt_df = self.get_scores(**kwargs)
 
         if row_pattern:
@@ -1344,9 +1366,19 @@ class SNP2CELL:
                 columns=lambda c: self.rename_column(c, row_pattern=row_pattern)
             )
 
+        if n_col is not None:
+            plt_df = plt_df.loc[
+                :, plt_df.mean(axis=0).nlargest(min(n_col, plt_df.shape[1])).index
+            ]
+
+        if asinh_transform:
+            plt_df = np.arcsinh(plt_df)
+
         rows = []
         for c in plt_df:
-            rows.extend(plt_df.sort_values(c, ascending=False)[:topn].index.tolist())
+            rows.extend(
+                plt_df.sort_values(c, ascending=False)[:genes_per_score].index.tolist()
+            )
         plt_df = plt_df.loc[list(set(rows)), :]
 
         # optimal leaf ordering for cols
