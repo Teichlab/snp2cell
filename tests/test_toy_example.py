@@ -1,3 +1,4 @@
+import warnings
 import snp2cell
 import matplotlib.pyplot as plt
 
@@ -71,18 +72,24 @@ def test_toy_example(fake_grn, fake_adata, fake_snp_score, tmp_path):
     assert sum_c > sum_b > sum_a, "computed values are not correct"
 
     # test plotting
-    plt.switch_backend("Agg")  # non-interactive backend (don't display plots)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=".*FigureCanvasAgg.*non-interactive.*",
+            category=UserWarning,
+        )
+        plt.switch_backend("Agg")  # non-interactive backend (don't display plots)
 
-    with check_plot_nonempty() as buf:
-        s2c.plot_group_summary(score_key="snp_score")
-        plt.savefig(buf, format="png")
+        with check_plot_nonempty() as buf:
+            s2c.plot_group_summary(score_key="snp_score")
+            plt.savefig(buf, format="png")
 
-    with check_plot_nonempty() as buf:
-        s2c.plot_group_heatmap(score_key="snp_score", query="")
-        plt.savefig(buf, format="png")
+        with check_plot_nonempty() as buf:
+            s2c.plot_group_heatmap(score_key="snp_score", query="")
+            plt.savefig(buf, format="png")
 
-    # network plot only works with directed graphs at the moment
-    # s2c.plot_network(score="snp_score", gene="1")
+        # network plot only works with directed graphs at the moment
+        # s2c.plot_network(score="snp_score", gene="1")
 
-    # Close all plots to avoid memory issues
-    plt.close("all")
+        # Close all plots to avoid memory issues
+        plt.close("all")
