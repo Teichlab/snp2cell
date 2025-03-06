@@ -340,6 +340,19 @@ def load_fgwas_scores(
     df = pd.read_csv(fgwas_output_path, sep="\t", header=None)
     df.columns = ["regionID", "SNP_BF", "SNP_rel_loc"]
 
+    # load region locations
+    log.info(f"loading region locations from '{region_loc_path}'")
+    region_info = pd.read_csv(region_loc_path, sep="\t")
+    region_info.index += 1
+
+    if region_info.shape[0] != df["regionID"].max():
+        log.warning(
+            f"largest region ID in fgwas output ({df['regionID'].max()})\n"
+            f"number of regions in region location file ({region_info.shape[0]})\n"
+            "are you sure the region location file corresponds to the fgwas output?"
+        )
+
+    # calculate regional Bayes factors
     log.info(f"calculating regional Bayes factors")
     region_groups = list(df.groupby("regionID"))
     with mp.Pool(num_cores) as pool:
@@ -353,8 +366,7 @@ def load_fgwas_scores(
     res = pd.concat(res)
 
     # add region information from region_loc_path
-    log.info(f"loading region locations from '{region_loc_path}'")
-    region_info = pd.read_csv(region_loc_path, sep="\t")
+    log.info(f"adding region information to scores")
     region_info["log_RBF"] = region_info.index.map(res)
     region_info["name"] = region_info.apply(
         lambda r: f"chr{int(r['hm_chr'])}:{int(r['hm_pos'])}-{int(r['hm_pos'])}", axis=1

@@ -73,9 +73,10 @@ def test_export_for_fgwas(snp2cell_instance, tmp_path):
 
 def test_load_fgwas_scores(snp2cell_instance, tmp_path):
     # Create a temporary fgwas output file with two rows.
-    fgwas_output_path = tmp_path / "fgwas_output.txt"
-    with open(fgwas_output_path, "w") as f:
-        f.write(f"0\t{np.log(2)}\t0\n1\t{np.log(3)}\t0\n")
+    fgwas_output_path = tmp_path / "fgwas_output.gz"
+    # TODO: Replace with a more realistic example.
+    df = pd.DataFrame([[1, np.log(2), 0], [2, np.log(3), 0]])
+    df.to_csv(fgwas_output_path, sep="\t", header=False, index=False)
 
     # Create a temporary region location file with header (as in export_for_fgwas).
     region_loc_path = tmp_path / "region_loc.txt"
