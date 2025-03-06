@@ -865,6 +865,10 @@ class SNP2CELL:
             kwargs["rankby_abs"] = True
 
         log.info(f"finding DE genes for annotation {groupby}")
+        if isinstance(self.adata.obs[groupby].dtype, pd.CategoricalDtype):
+            self.adata.obs[groupby] = self.adata.obs[
+                groupby
+            ].cat.remove_unused_categories()
         with warnings.catch_warnings():
             warnings.simplefilter(
                 action="ignore", category=pd.errors.PerformanceWarning
