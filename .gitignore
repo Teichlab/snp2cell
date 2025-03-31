@@ -13,3 +13,4 @@ data/
 .pybiomart.sqlite
 docs/assets/snp2cell_schematic.pdf
 .coverage*
+_notebooks 

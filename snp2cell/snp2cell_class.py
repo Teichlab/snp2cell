@@ -1225,6 +1225,7 @@ class SNP2CELL:
         self,
         score_key: str = "score",
         plt_df: Optional[pd.DataFrame] = None,
+        order: Optional[List[str]] = None,
         topn: Optional[int] = 20,
         errorbar: Literal["pi", "std", "ci", "se"] = "ci",
         row_pattern: str = ".*DE_(?P<rowname>.+?)__",
@@ -1253,6 +1254,8 @@ class SNP2CELL:
             Only used if `plt_df` is not set.
         plt_df : Optional[pd.DataFrame], optional
             Data frame with scores to plot (as retrieved by `snp2cell.get_scores()`), by default None. If not set, scores in the object will be plotted.
+        order : Optional[List[str]], optional
+            Order of scores to plot, by default None. If not set, scores will be plotted in descending order by mean across rows.
         topn : Optional[int], optional
             Number of top scores to plot, by default 20. If None, all scores will be plotted.
         errorbar : Literal["pi", "std", "ci", "se"], optional
@@ -1285,7 +1288,8 @@ class SNP2CELL:
                 columns=lambda c: self.rename_column(c, row_pattern=row_pattern)
             )
 
-        order = plt_df.mean(axis=0).sort_values(ascending=False).index.tolist()
+        if order is None:
+            order = plt_df.mean(axis=0).sort_values(ascending=False).index.tolist()
         if topn:
             order = order[:topn]
 
@@ -1316,6 +1320,8 @@ class SNP2CELL:
         row_pattern: str = ".*DE_(?P<rowname>.+?)__",
         figsize: Tuple[int, int] = (7, 7),
         dendrogram_ratio: Tuple[float, float] = (0.1, 0.1),
+        cluster_rows: bool = True,
+        cluster_cols: bool = True,
         **kwargs: Any,
     ) -> None:
         """
@@ -1353,6 +1359,10 @@ class SNP2CELL:
             Figure size, by default (7, 7).
         dendrogram_ratio : Tuple[float, float], optional
             Ratio of the dendrogram size to the heatmap size, by default (0.1, 0.1).
+        cluster_rows : bool, optional
+            Whether to cluster rows, by default True.
+        cluster_cols : bool, optional
+            Whether to cluster columns, by default True.
         kwargs : Any
             Options passed to `get_scores(**kwargs)`.
 
@@ -1416,8 +1426,8 @@ class SNP2CELL:
             dendrogram_ratio=dendrogram_ratio,
             row_linkage=row_linkage,
             col_linkage=col_linkage,
-            col_cluster=True,
-            row_cluster=True,
+            col_cluster=cluster_cols,
+            row_cluster=cluster_rows,
             z_score=None,
         )
 
