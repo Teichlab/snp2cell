@@ -283,7 +283,11 @@ class SNP2CELL:
         """
         return (series - series.min()) / (series.max() - series.min())
 
-    def _prop_scr(self, scr_dct: Dict[str, float]) -> Dict[str, float]:
+    def _prop_scr(
+        self,
+        scr_dct: Dict[str, float],
+        pagerank_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, float]:
         """
         Propagate scores using PageRank.
 
@@ -291,15 +295,20 @@ class SNP2CELL:
         ----------
         scr_dct : Dict[str, float]
             Dictionary of scores.
+        pagerank_kwargs : Optional[Dict[str, Any]], optional
+            Additional keyword arguments passed through to `networkx.pagerank()`
+            (e.g. `{"weight": "weight"}` to use edge weights), by default None.
 
         Returns
         -------
         Dict[str, float]
             Dictionary of propagated scores.
         """
+        pagerank_kwargs = pagerank_kwargs or {}
         return nx.pagerank(
             self.grn.to_undirected() if PROPAGATE_UNDIRECTED else self.grn,
             personalization=scr_dct,
+            **pagerank_kwargs,
         )
 
     def _defrag_pandas(self) -> None:
@@ -482,6 +491,7 @@ class SNP2CELL:
         statistics: bool = True,
         num_rand: int = 1000,
         num_cores: Optional[int] = None,
+        pagerank_kwargs: Optional[Dict[str, Any]] = None,
         log: logging.Logger = logging.getLogger(),
         reset_seed: Union[bool, int] = True,
     ) -> None:
@@ -502,6 +512,9 @@ class SNP2CELL:
             Number of permutations to compute if statistics is True, by default 1000.
         num_cores : Optional[int], optional
             Number of cores to use, by default None.
+        pagerank_kwargs : Optional[Dict[str, Any]], optional
+            Additional keyword arguments passed through to `networkx.pagerank()`
+            (e.g. `{"weight": "weight"}` to use edge weights), by default None.
         log : logging.Logger, optional
             Logger, by default logging.getLogger().
         reset_seed : Union[bool, int], optional
@@ -515,7 +528,7 @@ class SNP2CELL:
         self._scale_score(score_key)
         if propagate:
             log.info(f"propagating score: {score_key}")
-            _, p_scr_dct = self.propagate_score(score_key)
+            _, p_scr_dct = self.propagate_score(score_key, pagerank_kwargs=pagerank_kwargs)
             log.info(f"storing score {score_key}")
             if score_key in self.scores_prop:  # type: ignore
                 log.warning(
@@ -528,11 +541,16 @@ class SNP2CELL:
                     num_cores=num_cores,
                     n=num_rand,
                     reset_seed=reset_seed,
+                    pagerank_kwargs=pagerank_kwargs,
                 )
                 self.add_score_statistics(score_keys=score_key)
         self._defrag_pandas()
 
-    def propagate_score(self, score_key: str = "score") -> Tuple[str, Dict[str, float]]:
+    def propagate_score(
+        self,
+        score_key: str = "score",
+        pagerank_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, Dict[str, float]]:
         """
         Propagate score.
 
@@ -540,6 +558,9 @@ class SNP2CELL:
         ----------
         score_key : str, optional
             Key under which the score is stored, by default "score".
+        pagerank_kwargs : Optional[Dict[str, Any]], optional
+            Additional keyword arguments passed through to `networkx.pagerank()`
+            (e.g. `{"weight": "weight"}` to use edge weights), by default None.
 
         Returns
         -------
@@ -548,7 +569,7 @@ class SNP2CELL:
         """
         self._check_init()
         scr_dct = self.scores[score_key].to_dict()  # type: ignore
-        p_scr_dct = self._prop_scr(scr_dct)
+        p_scr_dct = self._prop_scr(scr_dct, pagerank_kwargs=pagerank_kwargs)
         return score_key, p_scr_dct
 
     @add_logger()
@@ -556,6 +577,7 @@ class SNP2CELL:
         self,
         score_keys: List[str],
         num_cores: Optional[int] = None,
+        pagerank_kwargs: Optional[Dict[str, Any]] = None,
         log: logging.Logger = logging.getLogger(),
     ) -> None:
         """
@@ -567,6 +589,9 @@ class SNP2CELL:
             Keys under which the scores are stored.
         num_cores : Optional[int], optional
             Number of cores to use, by default None.
+        pagerank_kwargs : Optional[Dict[str, Any]], optional
+            Additional keyword arguments passed through to `networkx.pagerank()`
+            (e.g. `{"weight": "weight"}` to use edge weights), by default None.
         log : logging.Logger, optional
             Logger, by default logging.getLogger().
         """
@@ -581,7 +606,10 @@ class SNP2CELL:
         log.info(f"propagating scores")
         log.debug(f"scores to propagate: {score_keys}")
         prop_scores = loop_parallel(
-            score_keys, self.propagate_score, num_cores=num_cores
+            score_keys,
+            self.propagate_score,
+            num_cores=num_cores,
+            pagerank_kwargs=pagerank_kwargs,
         )
         for key, dct in prop_scores:  # type: ignore
             if key in self.scores_prop:  # type: ignore
@@ -596,6 +624,7 @@ class SNP2CELL:
         n: int = 1000,
         num_cores: Optional[int] = None,
         timeout: Optional[int] = None,
+        pagerank_kwargs: Optional[Dict[str, Any]] = None,
         log: logging.Logger = logging.getLogger(),
         reset_seed: Union[bool, int] = True,
     ) -> None:
@@ -614,6 +643,9 @@ class SNP2CELL:
             Number of cores to use, by default None.
         timeout : Optional[int], optional
             Timeout in seconds for parallel workers.
+        pagerank_kwargs : Optional[Dict[str, Any]], optional
+            Additional keyword arguments passed through to `networkx.pagerank()`
+            (e.g. `{"weight": "weight"}` to use edge weights), by default None.
         log : logging.Logger, optional
             Logger, by default logging.getLogger().
         reset_seed : Union[bool, int], optional
@@ -647,7 +679,11 @@ class SNP2CELL:
 
         log.debug("propagating permutations")
         prop_scores = loop_parallel(
-            pers_rand, self._prop_scr, num_cores=num_cores, timeout=timeout
+            pers_rand,
+            self._prop_scr,
+            num_cores=num_cores,
+            timeout=timeout,
+            pagerank_kwargs=pagerank_kwargs,
         )
         log.debug(f"storing scores under key {perturb_key}")
         self.scores_rand[perturb_key] = pd.DataFrame(
@@ -831,6 +867,7 @@ class SNP2CELL:
         simn: int = 1000,
         statistics: bool = True,
         num_cores: Optional[int] = None,
+        pagerank_kwargs: Optional[Dict[str, Any]] = None,
         log: logging.Logger = logging.getLogger(),
         rank_by: str = "up",
         **kwargs: Any,
@@ -857,6 +894,9 @@ class SNP2CELL:
             Whether to compute permutation results, by default True.
         num_cores : Optional[int], optional
             Number of cores to use, by default None.
+        pagerank_kwargs : Optional[Dict[str, Any]], optional
+            Additional keyword arguments passed through to `networkx.pagerank()`
+            (e.g. `{"weight": "weight"}` to use edge weights), by default None.
         log : logging.Logger, optional
             Logger, by default logging.getLogger().
         rank_by : str, optional
@@ -923,7 +963,9 @@ class SNP2CELL:
             else:
                 score_keys.append(scr_key)
 
-        self.propagate_scores(score_keys, num_cores=num_cores)
+        self.propagate_scores(
+            score_keys, num_cores=num_cores, pagerank_kwargs=pagerank_kwargs
+        )
 
         if statistics:
             self.rand_sim(
@@ -931,6 +973,7 @@ class SNP2CELL:
                 perturb_key=f"DE_{groupby}__score",
                 n=simn,
                 num_cores=num_cores,
+                pagerank_kwargs=pagerank_kwargs,
             )
 
             self.add_score_statistics(
