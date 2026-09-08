@@ -508,7 +508,7 @@ def score_de(
     s2c.adata_combine_de_scores(
         group_key=groupby,
         score_key=snp_score_key,
-        suffix="__zscore",
+        suffix="__zscore_dmad",
     )
 
     # save
@@ -540,7 +540,7 @@ def combine_scores(
     s2c.adata_combine_de_scores(
         group_key=groupby,
         score_key=snp_score_key,
-        suffix="__zscore",
+        suffix="__zscore_dmad",
     )
 
     # save
