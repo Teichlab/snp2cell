@@ -36,6 +36,8 @@ class SUFFIX(Enum):
     NONE = ""
     ZSCORE = "__zscore"
     ZSCORE_MAD = "__zscore_mad"
+    ZSCORE_DMAD = "__zscore_dmad"
+    ZSCORE_EMP = "__zscore_emp"
 
 
 class SNP2CELL:
@@ -198,7 +200,9 @@ class SNP2CELL:
         else:
             return scr
 
-    def _get_perturbed_stats(self, score_key: str, suffix: SUFFIX) -> pd.DataFrame:
+    def _get_perturbed_stats(
+        self, score_key: str, suffix: Union[str, SUFFIX]
+    ) -> pd.DataFrame:
         """
         Get perturbed statistics.
 
@@ -219,21 +223,27 @@ class SNP2CELL:
         ValueError
             If the suffix is invalid.
         """
+        if isinstance(suffix, SUFFIX):
+            suffix = suffix.value
         if suffix not in [s.value for s in SUFFIX]:
             raise ValueError(
                 f"Invalid suffix. Must be one of {[s.value for s in SUFFIX]}. Got '{suffix}'."
             )
         score = self.scores_rand[score_key]
-        if suffix == SUFFIX.ZSCORE:
+        if suffix == SUFFIX.ZSCORE.value:
             score = score.apply(self._z_score, axis=0)
-        if suffix == SUFFIX.ZSCORE_MAD:
+        elif suffix == SUFFIX.ZSCORE_MAD.value:
             score = score.apply(self._robust_z_score, axis=0)
+        elif suffix == SUFFIX.ZSCORE_DMAD.value:
+            score = score.apply(self._double_mad_z_score, axis=0)
+        elif suffix == SUFFIX.ZSCORE_EMP.value:
+            score = score.apply(self._empirical_z_score, axis=0)
         return score
 
     @staticmethod
     def _robust_z_score(series: pd.Series) -> pd.Series:
         """
-        Calculate robust z-score.
+        Calculate robust z-score (single, symmetric MAD).
 
         Parameters
         ----------
@@ -248,6 +258,54 @@ class SNP2CELL:
         mad = sp.stats.median_abs_deviation(series, scale=1.0)
         zscore = MAD_SCALE * (series - series.median()) / mad
         return zscore
+
+    @staticmethod
+    def _double_mad_z_score(series: pd.Series) -> pd.Series:
+        """
+        Calculate double MAD (median absolute deviation) z-score.
+        Like `_robust_z_score`, but the MAD is calculated separately for values
+        below and above the median, which helps with skewed distributions.
+
+        Parameters
+        ----------
+        series : pd.Series
+            Series to calculate z-score for.
+
+        Returns
+        -------
+        pd.Series
+            Series with double MAD z-scores.
+        """
+        median = series.median()
+        diff = series - median
+        mad_below = sp.stats.median_abs_deviation(series[series <= median], scale=1.0)
+        mad_above = sp.stats.median_abs_deviation(series[series >= median], scale=1.0)
+        mad = np.where(diff < 0, mad_below, mad_above)
+        zscore = MAD_SCALE * diff / mad
+        return pd.Series(zscore, index=series.index)
+
+    @staticmethod
+    def _empirical_z_score(series: pd.Series) -> pd.Series:
+        """
+        Calculate empirical (rank-based) z-score.
+        The value's percentile rank within the series is mapped to a z-score via the
+        inverse normal CDF. This is fully non-parametric and therefore robust to
+        skewed distributions and MAD collapse (many identical values).
+
+        Parameters
+        ----------
+        series : pd.Series
+            Series to calculate z-score for.
+
+        Returns
+        -------
+        pd.Series
+            Series with empirical z-scores.
+        """
+        n = series.shape[0]
+        pct = series.rank(method="average") / (n + 1)
+        zscore = sp.stats.norm.ppf(pct)
+        return pd.Series(zscore, index=series.index)
 
     @staticmethod
     def _z_score(series: pd.Series) -> pd.Series:
@@ -265,6 +323,42 @@ class SNP2CELL:
             Series with z-scores.
         """
         return (series - series.mean()) / series.std()
+
+    @staticmethod
+    def _zscore_vs_background(observed: pd.Series, background: pd.DataFrame) -> pd.Series:
+        """Z-score of `observed` relative to mean/std of `background` (per column)."""
+        return (observed - background.mean(axis=0)) / background.std(axis=0)
+
+    @staticmethod
+    def _zscore_mad_vs_background(
+        observed: pd.Series, background: pd.DataFrame
+    ) -> pd.Series:
+        """Robust z-score of `observed` relative to median/MAD of `background` (per column)."""
+        mad = sp.stats.median_abs_deviation(background, axis=0, scale=1.0)
+        return MAD_SCALE * (observed - background.median(axis=0)) / mad
+
+    @staticmethod
+    def _zscore_dmad_vs_background(
+        observed: pd.Series, background: pd.DataFrame
+    ) -> pd.Series:
+        """Double MAD z-score of `observed` relative to `background` (per column)."""
+        median = background.median(axis=0)
+        diff_bg = background.sub(median, axis=1)
+        mad_below = diff_bg.where(diff_bg <= 0).abs().median(axis=0)
+        mad_above = diff_bg.where(diff_bg >= 0).median(axis=0)
+        diff = observed - median
+        mad = mad_above.where(diff >= 0, mad_below)
+        return MAD_SCALE * diff / mad
+
+    @staticmethod
+    def _zscore_emp_vs_background(
+        observed: pd.Series, background: pd.DataFrame
+    ) -> pd.Series:
+        """Empirical (rank-based) z-score of `observed` relative to `background` (per column)."""
+        n = background.shape[0]
+        n_less = background.lt(observed, axis=1).sum(axis=0)
+        pct = (n_less + 1) / (n + 2)
+        return pd.Series(sp.stats.norm.ppf(pct), index=observed.index)
 
     @staticmethod
     def _std_scale(series: pd.Series) -> pd.Series:
@@ -494,6 +588,11 @@ class SNP2CELL:
         pagerank_kwargs: Optional[Dict[str, Any]] = None,
         log: logging.Logger = logging.getLogger(),
         reset_seed: Union[bool, int] = True,
+        zscore_types: Union[str, SUFFIX, Iterable[Union[str, SUFFIX]]] = (
+            SUFFIX.ZSCORE,
+            SUFFIX.ZSCORE_DMAD,
+            SUFFIX.ZSCORE_EMP,
+        ),
     ) -> None:
         """
         Add a score to the object. Optionally propagate the score and calculate permutation statistics.
@@ -519,6 +618,8 @@ class SNP2CELL:
             Logger, by default logging.getLogger().
         reset_seed : Union[bool, int], optional
             Whether to reset the seed for random number generation, by default True.
+        zscore_types : Union[str, SUFFIX, Iterable[Union[str, SUFFIX]]], optional
+            Which z-score version(s) to compute, passed through to `add_score_statistics()`, by default ("__zscore", "__zscore_dmad", "__zscore_emp").
         """
         self._check_init()
         log.info(f"adding score: {score_key}")
@@ -543,7 +644,9 @@ class SNP2CELL:
                     reset_seed=reset_seed,
                     pagerank_kwargs=pagerank_kwargs,
                 )
-                self.add_score_statistics(score_keys=score_key)
+                self.add_score_statistics(
+                    score_keys=score_key, zscore_types=zscore_types
+                )
         self._defrag_pandas()
 
     def propagate_score(
@@ -690,10 +793,23 @@ class SNP2CELL:
             prop_scores, index=range(len(prop_scores))
         )
 
+    #: maps each z-score SUFFIX to the function computing it relative to a random background
+    _ZSCORE_FUNCS = {
+        SUFFIX.ZSCORE: _zscore_vs_background.__func__,  # type: ignore
+        SUFFIX.ZSCORE_MAD: _zscore_mad_vs_background.__func__,  # type: ignore
+        SUFFIX.ZSCORE_DMAD: _zscore_dmad_vs_background.__func__,  # type: ignore
+        SUFFIX.ZSCORE_EMP: _zscore_emp_vs_background.__func__,  # type: ignore
+    }
+
     @add_logger()
     def add_score_statistics(
         self,
         score_keys: Union[str, List[str], Dict[str, str]] = "score",
+        zscore_types: Union[str, SUFFIX, Iterable[Union[str, SUFFIX]]] = (
+            SUFFIX.ZSCORE,
+            SUFFIX.ZSCORE_DMAD,
+            SUFFIX.ZSCORE_EMP,
+        ),
         log: logging.Logger = logging.getLogger(),
     ) -> None:
         """
@@ -702,7 +818,13 @@ class SNP2CELL:
         Parameters
         ----------
         score_keys : Union[str, List[str], Dict[str, str]], optional
-            Scores for which to calculate statistics. May be a single score, a list of scores or a dictionary ({<score_key>: <perturb_key>}). If not a dictionary assuming `score_key==perturb_key`, by default "score".
+            Scores for which to calculate statistics. May be a single score, a list of scores or a dictionary ({{<score_key>: <perturb_key>}}). If not a dictionary assuming `score_key==perturb_key`, by default "score".
+        zscore_types : Union[str, SUFFIX, Iterable[Union[str, SUFFIX]]], optional
+            Which z-score version(s) to compute in addition to `pval`/`FDR`, by default ("__zscore", "__zscore_dmad", "__zscore_emp").
+            Available options are: {_SUFFIX_} (excluding "").
+            "__zscore" is the standard z-score (mean/std), "__zscore_mad" is a robust z-score using a single, symmetric MAD,
+            "__zscore_dmad" is a double MAD z-score (separate MAD below/above the median, useful for skewed distributions, default robust option),
+            and "__zscore_emp" is a fully non-parametric, rank-based z-score (robust to skewed distributions and MAD collapse).
         log : logging.Logger, optional
             Logger, by default logging.getLogger().
         """
@@ -714,36 +836,37 @@ class SNP2CELL:
         if isinstance(score_keys, list):
             score_keys = {k: k for k in score_keys}
 
+        if isinstance(zscore_types, (str, SUFFIX)):
+            zscore_types = [zscore_types]
+        zscore_types = [
+            z if isinstance(z, SUFFIX) else SUFFIX(z) for z in zscore_types
+        ]
+        invalid_types = [z for z in zscore_types if z not in self._ZSCORE_FUNCS]
+        if invalid_types:
+            raise ValueError(
+                f"Invalid zscore_types: {invalid_types}. Must be a subset of "
+                f"{[s.value for s in self._ZSCORE_FUNCS]}."
+            )
+
         dfs = []
         for s_key, p_key in score_keys.items():
-            pval = (self.scores_prop[s_key] < self.scores_rand[p_key]).sum(  # type: ignore
-                axis=0
-            ) / self.scores_rand[
-                p_key
-            ].shape[
-                0
-            ]
+            observed = self.scores_prop[s_key]  # type: ignore
+            background = self.scores_rand[p_key]
+            pval = (observed < background).sum(axis=0) / background.shape[0]
             _, fdr, _, _ = sm.stats.multipletests(pval, method="fdr_bh")
-            zscore_std = (
-                self.scores_prop[s_key] - self.scores_rand[p_key].mean(axis=0)  # type: ignore
-            ) / self.scores_rand[p_key].std(axis=0)
-            mad = sp.stats.median_abs_deviation(
-                self.scores_rand[p_key], axis=0, scale=1.0
-            )
-            zscore_mad = (
-                MAD_SCALE
-                * (self.scores_prop[s_key] - self.scores_rand[p_key].median(axis=0))  # type: ignore
-                / mad
-            )
+
+            stat_cols = {
+                f"{s_key}__pval": pval,
+                f"{s_key}__FDR": fdr,
+            }
+            for suffix in zscore_types:
+                stat_cols[f"{s_key}{suffix.value}"] = self._ZSCORE_FUNCS[suffix](
+                    observed, background
+                )
 
             dfs.append(
                 pd.DataFrame(
-                    {
-                        f"{s_key}__pval": pval,
-                        f"{s_key}__FDR": fdr,
-                        f"{s_key}__zscore": zscore_std,
-                        f"{s_key}__zscore_mad": zscore_mad,
-                    },
+                    stat_cols,
                     index=self.scores_prop.index,  # type: ignore
                 )
             )
@@ -870,6 +993,11 @@ class SNP2CELL:
         pagerank_kwargs: Optional[Dict[str, Any]] = None,
         log: logging.Logger = logging.getLogger(),
         rank_by: str = "up",
+        zscore_types: Union[str, SUFFIX, Iterable[Union[str, SUFFIX]]] = (
+            SUFFIX.ZSCORE,
+            SUFFIX.ZSCORE_DMAD,
+            SUFFIX.ZSCORE_EMP,
+        ),
         **kwargs: Any,
     ) -> None:
         """
@@ -901,6 +1029,8 @@ class SNP2CELL:
             Logger, by default logging.getLogger().
         rank_by : str, optional
             Rank genes by upregulation ("up"), downregulation ("down") or absolute value ("abs"), by default "up".
+        zscore_types : Union[str, SUFFIX, Iterable[Union[str, SUFFIX]]], optional
+            Which z-score version(s) to compute, passed through to `add_score_statistics()`, by default ("__zscore", "__zscore_dmad", "__zscore_emp").
         kwargs : Any
             Arguments passed to `sc.tl.rank_genes_groups()`.
         """
@@ -977,7 +1107,8 @@ class SNP2CELL:
             )
 
             self.add_score_statistics(
-                score_keys={k: f"DE_{groupby}__score" for k in score_keys}
+                score_keys={k: f"DE_{groupby}__score" for k in score_keys},
+                zscore_types=zscore_types,
             )
         self._defrag_pandas()
 
@@ -988,6 +1119,11 @@ class SNP2CELL:
         suffix: SUFFIX = SUFFIX.NONE,
         scale: bool = False,
         statistics: bool = True,
+        zscore_types: Union[str, SUFFIX, Iterable[Union[str, SUFFIX]]] = (
+            SUFFIX.ZSCORE,
+            SUFFIX.ZSCORE_DMAD,
+            SUFFIX.ZSCORE_EMP,
+        ),
     ) -> None:
         """
         Combine differential expression based scores with other scores. E.g. combine them with GWAS based scores.
@@ -1005,6 +1141,8 @@ class SNP2CELL:
             Whether to scale scores between 0 and 1 before combining, by default False.
         statistics : bool, optional
             Whether to calculate statistics based on random perturbation background, by default True.
+        zscore_types : Union[str, SUFFIX, Iterable[Union[str, SUFFIX]]], optional
+            Which z-score version(s) to compute, passed through to `add_score_statistics()`, by default ("__zscore", "__zscore_dmad", "__zscore_emp").
         """
         groups = self.de_groups[group_key]
 
@@ -1022,7 +1160,8 @@ class SNP2CELL:
                 score_keys={
                     f"min(DE_{grp}__score{suffix},{score_key}{suffix})": f"min(DE_{group_key}__score{suffix},{score_key}{suffix})"
                     for grp in groups
-                }
+                },
+                zscore_types=zscore_types,
             )
 
     ###--------------------------------------------------- export
@@ -1283,11 +1422,11 @@ class SNP2CELL:
         1. Set `plt_df` to a data frame with scores. This will plot all scores in the data frame.
         2. Set `score_key` to a key of a score to plot. This will plot all combinations of this score with other scores.
            `**kwargs` will be passed to `get_scores(**kwargs)`. If `query` is not in `kwargs`, it will be set to `f"{score_key}__pval < 0.05"`.
-            If `regex` is not in `kwargs`, it will be set to `f"^min.*{score_key}.*zscore_mad$`.
+            If `regex` is not in `kwargs`, it will be set to `f"^min.*{score_key}.*zscore_dmad$`.
 
-        E.g. `regex="^min.*{score_key}.*zscore_mad$"` means that only combinations of score `score_key` with any other scores will be plotted.
+        E.g. `regex="^min.*{score_key}.*zscore_dmad$"` means that only combinations of score `score_key` with any other scores will be plotted.
         If this score has been combined with DE scores, for example, this will be the combinations for all cell types.
-        Here `min(...,...)__zscore_mad` means the combined score is the minimum of the two scores, normalized as a robust z-score.
+        Here `min(...,...)__zscore_dmad` means the combined score is the minimum of the two scores, normalized as a double MAD z-score.
         The complicated column names are simplified by extracting the cell type names with `row_pattern`, to use for the x-axis of the plot.
 
         Parameters
@@ -1321,7 +1460,7 @@ class SNP2CELL:
         if plt_df is None:
             if score_key:
                 if "regex" not in kwargs:
-                    kwargs["regex"] = f"^min.*{score_key}.*zscore_mad$"
+                    kwargs["regex"] = f"^min.*{score_key}.*zscore_dmad$"
                 if "query" not in kwargs:
                     kwargs["query"] = f"{score_key}__pval < 0.05"
             plt_df = self.get_scores(**kwargs)
@@ -1374,11 +1513,11 @@ class SNP2CELL:
         1. Set `plt_df` to a data frame with scores. This will plot all scores in the data frame.
         2. Set `score_key` to a key of a score to plot. This will plot all combinations of this score with other scores.
            `**kwargs` will be passed to `get_scores(**kwargs)`. If `query` is not in `kwargs`, it will be set to `f"~index.str.startswith('chr') and {score_key}__pval < 0.05"`.
-           If `regex` is not in `kwargs`, it will be set to `f"^min.*{score_key}.*zscore_mad$`.
+           If `regex` is not in `kwargs`, it will be set to `f"^min.*{score_key}.*zscore_dmad$`.
 
-        E.g. `regex="^min.*{score_key}.*zscore_mad$"` means that only combinations of score `score_key` with any other scores will be plotted.
+        E.g. `regex="^min.*{score_key}.*zscore_dmad$"` means that only combinations of score `score_key` with any other scores will be plotted.
         If this score has been combined with DE scores, for example, this will be the combinations for all cell types.
-        Here `min(...,...)__zscore_mad` means the combined score is the minimum of the two scores, normalized as a robust z-score.
+        Here `min(...,...)__zscore_dmad` means the combined score is the minimum of the two scores, normalized as a double MAD z-score.
         The complicated column names are simplified by extracting the cell type names with `row_pattern`, to use for the x-axis of the plot.
 
         Parameters
@@ -1416,7 +1555,7 @@ class SNP2CELL:
         if plt_df is None:
             if score_key:
                 if "regex" not in kwargs:
-                    kwargs["regex"] = f"^min.*{score_key}.*zscore_mad$"
+                    kwargs["regex"] = f"^min.*{score_key}.*zscore_dmad$"
                 if "query" not in kwargs:
                     kwargs["query"] = (
                         f"~index.str.startswith('chr') and {score_key}__pval < 0.05"
@@ -1644,4 +1783,7 @@ SNP2CELL.adata_combine_de_scores.__doc__ = (
     SNP2CELL.adata_combine_de_scores.__doc__.format(
         _SUFFIX_=str([e.value for e in SUFFIX])
     )
+)
+SNP2CELL.add_score_statistics.__doc__ = SNP2CELL.add_score_statistics.__doc__.format(
+    _SUFFIX_=str([e.value for e in SUFFIX])
 )

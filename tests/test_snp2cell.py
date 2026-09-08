@@ -74,6 +74,46 @@ def test_robust_z_score():
     assert len(result) == 5, "Result length should match input length"
 
 
+def test_double_mad_z_score():
+    series = pd.Series([1, 2, 3, 4, 100])
+    result = snp2cell.SNP2CELL._double_mad_z_score(series)
+    assert isinstance(result, pd.Series), "Result should be a Series"
+    assert len(result) == 5, "Result length should match input length"
+    assert result.iloc[-1] > 0, "Outlier above median should have a positive z-score"
+
+
+def test_empirical_z_score():
+    series = pd.Series([1, 2, 3, 4, 5])
+    result = snp2cell.SNP2CELL._empirical_z_score(series)
+    assert isinstance(result, pd.Series), "Result should be a Series"
+    assert len(result) == 5, "Result length should match input length"
+    assert (result.diff().dropna() > 0).all(), "Result should be monotonic in the input"
+
+
+def test_add_score_statistics_zscore_types(snp2cell_instance):
+    np.random.seed(0)
+    snp2cell_instance.add_grn_from_networkx(nx.from_edgelist([("a", "b"), ("b", "c")]))
+    snp2cell_instance.scores = pd.DataFrame({"s": [5.0, 5.0, 5.0]}, index=["a", "b", "c"])
+    snp2cell_instance.scores_prop = pd.DataFrame(
+        {"s": [5.0, 5.0, 5.0]}, index=["a", "b", "c"]
+    )
+    snp2cell_instance.scores_rand["s"] = pd.DataFrame(
+        np.random.randn(100, 3), columns=["a", "b", "c"]
+    )
+
+    snp2cell_instance.add_score_statistics(
+        score_keys="s",
+        zscore_types=["__zscore", "__zscore_mad", "__zscore_dmad", "__zscore_emp"],
+    )
+    for suffix in ["__pval", "__FDR", "__zscore", "__zscore_mad", "__zscore_dmad", "__zscore_emp"]:
+        assert f"s{suffix}" in snp2cell_instance.scores_prop.columns, (
+            f"column s{suffix} should have been added"
+        )
+
+    with pytest.raises(ValueError):
+        snp2cell_instance.add_score_statistics(score_keys="s", zscore_types=["__bogus"])
+
+
 def test_get_scores(snp2cell_instance):
     # Add some scores to the instance
     snp2cell_instance.add_grn_from_networkx(nx.from_edgelist([(1, 2), (2, 3)]))
